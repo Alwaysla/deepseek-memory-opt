@@ -1,6 +1,19 @@
-# DeepSeek Harness
+# DeepSeek Harness with Memory Optimization
 
 English | [中文](README.zh.md)
+
+> **Note**: This is a fork of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) with additional features. All modifications follow the MIT License.
+>
+> **Added Features**:
+> - **Tag-indexed memory**: Long-term memory system with on-demand retrieval of archived conversation spans
+>   - `memory-core`: Content-hash indexed archival events and memory projection
+>   - `memory-compaction`: Tag-aware compaction backend that archives and indexes spans
+>   - `tool-recall`: `recall_memory(tags)` tool for deterministic span reconstruction
+>   - `memory-ttl-pruner`: Automatic fold-back of aged recalled content
+>
+> For details, see [Agent Note: Tag-indexed memory](.agents/notes/implemented/feature/2026-08-26-tag-indexed-memory.md).
+
+---
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 

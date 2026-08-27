@@ -1,6 +1,19 @@
-# DeepSeek Harness
+# DeepSeek Harness 记忆优化版
 
 [English](README.md) | 中文
+
+> **说明**：本项目基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 扩展而来，所有改动遵循 MIT 许可证。
+>
+> **新增特性**：
+> - **标签索引记忆系统**：长期记忆系统，支持按标签按需检索已归档的对话片段
+>   - `memory-core`：基于内容哈希的归档事件和记忆投影
+>   - `memory-compaction`：带标签的压缩后端，自动归档并索引片段
+>   - `tool-recall`：`recall_memory(tags)` 工具，从持久化日志确定性重建片段
+>   - `memory-ttl-pruner`：过期召回内容的自动折回
+>
+> 详见 [Agent Note：标签索引记忆](.agents/notes/implemented/feature/2026-08-26-tag-indexed-memory.zh.md)。
+
+---
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
