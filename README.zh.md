@@ -1,6 +1,26 @@
-# DeepSeek Harness
+# DeepSeek Harness 记忆优化版
 
 [English](README.md) | 中文
+
+在长任务的执行中，AI的上下文爆炸往往是最让人头疼的事情，不压缩？AI会变得越来越不知所云；压缩？又担心丢失关键信息AI可能又会一顿乱搞。于是我在思考一种适用于长任务的上下文保存逻辑：
+即当上下文用量大于设定阈值时将历史上下文分类打包、落盘，在上下文中换成一个标签，只记录他的索引。当当前任务需要用到这段上下文时再根据标签从日志中将它取出来，用完后再放回并打包新的上下文标签。以此实现记忆管理，让AI有想对更长更多的记忆，但又不至于上下文爆炸。
+
+该实现得益于deepseek harness两个重要的插件：其一是subagent，将一些会脏上下文的任务交给subagent来办，主代理中只保存结论与关键信息；其二是基于compaction-basic插件，compaction-basic插件实现了一个简单的丢弃上下文功能，当当前上下文使用量大于设定阈值后，将一部分上下文折叠为一个名牌进行存放，然后缩简上下文大小。
+但该压缩只是在保留原本日志不变的情况下缩减了当前对话的上下文，并没有索引历史上下文的功能。
+我的实现即是增加了折叠时的分类、需要时回调及回调后新的归档功能。
+
+> **说明**：本项目基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 扩展而来，所有改动遵循 MIT 许可证。
+>
+> **新增特性**：
+> - **标签索引记忆系统**：长期记忆系统，支持按标签按需检索已归档的对话片段
+>   - `memory-core`：基于内容哈希的归档事件和记忆投影
+>   - `memory-compaction`：带标签的压缩后端，自动归档并索引片段
+>   - `tool-recall`：`recall_memory(tags)` 工具，从持久化日志确定性重建片段
+>   - `memory-ttl-pruner`：过期召回内容的自动折回
+>
+> 详见 [Agent Note：标签索引记忆](.agents/notes/implemented/feature/2026-08-26-tag-indexed-memory.zh.md)。
+
+---
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
@@ -31,7 +51,7 @@ npx @deepseek-ai/dsh web
 如需从仓库源码运行：
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
+git clone https://github.com/Alwaysla/deepseek-memory-opt.git
 cd deepseek-harness
 pnpm install
 pnpm run build
