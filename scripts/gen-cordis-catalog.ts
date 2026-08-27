@@ -106,6 +106,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   agentTeams: 'agent-team.md',
   tokenMeter: 'token-meter.md',
   toolResultPruner: 'compaction.md',
+  memoryTtlPruner: 'compaction.md',
   tools: 'tools.md',
   typert: 'typert.md',
   typertGateway: 'typert.md',

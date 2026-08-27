@@ -1053,6 +1053,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'memoryTtlPruner',
+    summary: 'Folds aged-out recalled-memory results back to a stub on each pre-step.',
+    description: 'Folds aged-out recalled-memory results back to a stub on each pre-step.',
+    methods: [
+      {
+        signature: 'readonly retainSteps: number',
+        description: 'Resolved retention window in steps.',
+        parameters: [],
+      },
+      {
+        signature: 'pruneSession(session: Session): number',
+        description: 'Fold every recalled-memory surface result older than retainSteps back to a stub. A result is recalled when its call id belongs to a `recall_memory` `tool/call`; its age is the count of `step/start` events after it.',
+        parameters: [{ name: 'session', description: 'session whose current surface is rewritten.' }],
+        returns: 'the number of results folded back.',
+      },
+    ],
+  },
+  {
     key: 'messageFeedback',
     summary: 'Storage-domain sidecar service.',
     description: 'Storage-domain sidecar service. It inspects persisted Session history and never creates or resumes an Agent or Session.',

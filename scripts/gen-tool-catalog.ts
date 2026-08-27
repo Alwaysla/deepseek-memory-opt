@@ -61,6 +61,7 @@ import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
+import * as ToolRecall from '@deepseek-ai/dsh-tool-recall'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import VmWorkflowEngine from '@deepseek-ai/dsh-workflow-worker-thread'
@@ -572,6 +573,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-recall',
+    dir: 'tool-recall',
+    source: 'packages/memory/tool-recall/src/index.ts',
+    requires: ['ctx.tools', 'owning Agent session', 'ctx.sessionProjections (optional, for the memoryIndex read)'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolRecall)
+    },
+    note:
+      'recall_memory reconstructs compaction-archived spans from the durable log at each memory/archived entry\'s shadowed seqs, matched by tag. Without the session-projection seam it returns no memories, so its result is deterministic under replay.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-workflow',

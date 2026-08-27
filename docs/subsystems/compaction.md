@@ -194,6 +194,28 @@ Types: [CommandId](commands.md)
 
 Source: [`packages/compaction/compaction/src/index.ts`](../../packages/compaction/compaction/src/index.ts)
 
+<a id="ctxmemoryttlpruner--memoryttlpruner"></a>
+
+### `ctx.memoryTtlPruner` — `MemoryTtlPruner`
+
+Folds aged-out recalled-memory results back to a stub on each pre-step.
+
+```ts cordis-catalog
+/**
+ * Fold every recalled-memory surface result older than {@link retainSteps}
+ * back to a stub. A result is recalled when its call id belongs to a
+ * `recall_memory` `tool/call`; its age is the count of `step/start` events
+ * after it.
+ * @param session - session whose current surface is rewritten.
+ * @returns the number of results folded back.
+ */
+pruneSession(session: Session): number
+```
+
+Types: [Session](session.md)
+
+Source: [`packages/memory/memory-ttl-pruner/src/index.ts`](../../packages/memory/memory-ttl-pruner/src/index.ts)
+
 <a id="ctxtoolresultpruner--toolresultpruner"></a>
 
 ### `ctx.toolResultPruner` — `ToolResultPruner`

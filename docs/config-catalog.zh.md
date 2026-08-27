@@ -1441,6 +1441,27 @@ export interface ReconnectConfig {
 
 来源：[`packages/mcp/mcp-client/src/index.ts:98`](../packages/mcp/mcp-client/src/index.ts)
 
+<a id="deepseek-aidsh-memory-ttl-pruner"></a>
+
+## `@deepseek-ai/dsh-memory-ttl-pruner`
+
+需要：`tokenMeter`
+
+```ts config-catalog
+/** Deployment policy for how long a recalled memory stays expanded in context. */
+export interface MemoryTtlConfig {
+  /**
+   * Number of steps a `recall_memory` result remains verbatim before it is
+   * folded back. `0` folds it before the very next step; larger values keep it
+   * available across more steps. Counted by `step/start` events after the result.
+   * Defaults to `2`.
+   */
+  retainSteps?: number
+}
+```
+
+来源：[`packages/memory/memory-ttl-pruner/src/index.ts:37`](../packages/memory/memory-ttl-pruner/src/index.ts)
+
 <a id="deepseek-aidsh-message-feedback"></a>
 
 ## `@deepseek-ai/dsh-message-feedback`
@@ -3277,6 +3298,8 @@ export interface Config {
 - `@deepseek-ai/dsh-host-plugin-inventory` — 需要 `loader`（[`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-llm`（[`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts)）
 - `@deepseek-ai/dsh-lsp`（[`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts)）
+- `@deepseek-ai/dsh-memory-compaction` — 需要 `llm` · `tokenMeter` · `sessions` · `spillStore`（[`packages/memory/memory-compaction/src/index.ts`](../packages/memory/memory-compaction/src/index.ts)）
+- `@deepseek-ai/dsh-memory-core`（[`packages/memory/memory-core/src/index.ts`](../packages/memory/memory-core/src/index.ts)）
 - `@deepseek-ai/dsh-schedule` — 需要 `agents` · `sessions` · `tools` · `sessionPersistence`（[`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts)）
 - `@deepseek-ai/dsh-session`（[`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts)）
 - `@deepseek-ai/dsh-session-checkpoint-policy` — 需要 `llm` · `sessionPersistence` · `sessions` · `tools`（[`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts)）
@@ -3291,6 +3314,7 @@ export interface Config {
 - `@deepseek-ai/dsh-tool-ask-user` — 需要 `tools` · `userInteraction`（[`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts)）
 - `@deepseek-ai/dsh-tool-call-timeout-policy` — 需要 `tools`（[`packages/guard/timeout-policy/src/index.ts`](../packages/guard/timeout-policy/src/index.ts)）
 - `@deepseek-ai/dsh-tool-cordis` — 需要 `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect`（[`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts)）
+- `@deepseek-ai/dsh-tool-recall` — 需要 `tools`（[`packages/memory/tool-recall/src/index.ts`](../packages/memory/tool-recall/src/index.ts)）
 - `@deepseek-ai/dsh-tool-subagent-control` — 需要 `tools` · `subagents`（[`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts)）
 - `@deepseek-ai/dsh-user-questions`（[`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts)）
 - `@deepseek-ai/dsh-workspace` — 需要 `storageDomain` · `sessionPersistence`（[`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts)）

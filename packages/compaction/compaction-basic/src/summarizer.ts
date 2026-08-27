@@ -28,7 +28,7 @@ const SUMMARY_CLOSE_TAG = '</compacted-summary>'
  * front of it makes the auxiliary call a genuine prefix of the last routed
  * request, so the provider's KV cache is reused instead of invalidated.
  */
-const COMPACTION_INSTRUCTION = [
+export const COMPACTION_INSTRUCTION = [
   'You are now acting as a compaction engine for this AI coding assistant. Condense the conversation ABOVE into a structured checkpoint that lets another model resume the work with no loss of essential context.',
   '',
   'Output EXACTLY the Markdown structure below: keep every section, in order. Use terse bullets, not prose paragraphs. Write "(none)" for an empty section — never drop a section.',
@@ -116,6 +116,7 @@ export type SummaryResult = {
  * @param input - replayed conversation prefix (system, tools, and leading messages) to condense.
  * @param agent - supplies routed-model history, fallback model, and session id.
  * @param signal - optional cancellation forwarded to the adapter.
+ * @param instruction - final-user-message directive; a subclass backend overrides it to request a different checkpoint shape. Defaults to {@link COMPACTION_INSTRUCTION}.
  * @returns safe text-only summary blocks and the exact call envelope and output.
  */
 export async function summarizeWithLlm(
@@ -124,6 +125,7 @@ export async function summarizeWithLlm(
   input: SummarizationInput,
   agent: Agent,
   signal?: AbortSignal,
+  instruction: string = COMPACTION_INSTRUCTION,
 ): Promise<SummaryResult> {
   const latest = agent.session.requestHeader()?.config
   const configured = config.summarizationProvider.length === 0
@@ -146,7 +148,7 @@ export async function summarizeWithLlm(
   const messages: Message[] = [
     ...input.messages,
     createUserMessage({
-      content: [{ type: 'text', text: COMPACTION_INSTRUCTION }],
+      content: [{ type: 'text', text: instruction }],
       source: { kind: 'plugin', plugin: 'dsh-compaction-basic' },
     }),
   ]

@@ -27,7 +27,7 @@ import {
   compactSurfaceRegion,
   selectCompactableRange,
 } from './region.ts'
-import { summarizeWithLlm } from './summarizer.ts'
+import { summarizeWithLlm, COMPACTION_INSTRUCTION } from './summarizer.ts'
 import type { SummarizationInput, SummaryResult } from './summarizer.ts'
 import type {
   BasicCompactionConfig,
@@ -44,6 +44,10 @@ export type {
   ResolvedRetention,
   ResolvedTargetPolicy,
 } from './types.ts'
+
+// The `summarize()` hook exists to be overridden by a subclass backend; a
+// subclass must be able to name its input and result types.
+export type { SummarizationInput, SummaryResult } from './summarizer.ts'
 
 /** The region transaction's view of this service's dynamically dispatched summarizer. */
 type RegionSummarize = (input: SummarizationInput, agent: Agent, signal?: AbortSignal) => Promise<SummaryResult>
@@ -242,7 +246,17 @@ export class BasicCompactionEngine extends CompactionEngine {
     const config = target === undefined
       ? this.config
       : resolveTargetPolicy(this.config, target)
-    return summarizeWithLlm(this.ctx, config, input, agent, signal)
+    return summarizeWithLlm(this.ctx, config, input, agent, signal, this.summaryInstruction())
+  }
+
+  /**
+   * The final-user-message directive that steers the summarization call. The
+   * sole seam for a subclass that keeps the replay-and-price machinery but
+   * needs a different checkpoint shape (e.g. one carrying retrieval tags).
+   * @returns the default compaction directive.
+   */
+  protected summaryInstruction(): string {
+    return COMPACTION_INSTRUCTION
   }
 
   /**

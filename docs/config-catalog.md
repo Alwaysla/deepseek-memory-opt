@@ -1439,6 +1439,27 @@ export interface ReconnectConfig {
 
 Source: [`packages/mcp/mcp-client/src/index.ts:98`](../packages/mcp/mcp-client/src/index.ts)
 
+<a id="deepseek-aidsh-memory-ttl-pruner"></a>
+
+## `@deepseek-ai/dsh-memory-ttl-pruner`
+
+Requires: `tokenMeter`
+
+```ts config-catalog
+/** Deployment policy for how long a recalled memory stays expanded in context. */
+export interface MemoryTtlConfig {
+  /**
+   * Number of steps a `recall_memory` result remains verbatim before it is
+   * folded back. `0` folds it before the very next step; larger values keep it
+   * available across more steps. Counted by `step/start` events after the result.
+   * Defaults to `2`.
+   */
+  retainSteps?: number
+}
+```
+
+Source: [`packages/memory/memory-ttl-pruner/src/index.ts:37`](../packages/memory/memory-ttl-pruner/src/index.ts)
+
 <a id="deepseek-aidsh-message-feedback"></a>
 
 ## `@deepseek-ai/dsh-message-feedback`
@@ -3275,6 +3296,8 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-host-plugin-inventory` — requires `loader` ([`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts))
 - `@deepseek-ai/dsh-llm` ([`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts))
 - `@deepseek-ai/dsh-lsp` ([`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts))
+- `@deepseek-ai/dsh-memory-compaction` — requires `llm` · `tokenMeter` · `sessions` · `spillStore` ([`packages/memory/memory-compaction/src/index.ts`](../packages/memory/memory-compaction/src/index.ts))
+- `@deepseek-ai/dsh-memory-core` ([`packages/memory/memory-core/src/index.ts`](../packages/memory/memory-core/src/index.ts))
 - `@deepseek-ai/dsh-schedule` — requires `agents` · `sessions` · `tools` · `sessionPersistence` ([`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts))
 - `@deepseek-ai/dsh-session` ([`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts))
 - `@deepseek-ai/dsh-session-checkpoint-policy` — requires `llm` · `sessionPersistence` · `sessions` · `tools` ([`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts))
@@ -3289,6 +3312,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-tool-ask-user` — requires `tools` · `userQuestions` ([`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts))
 - `@deepseek-ai/dsh-tool-call-timeout-policy` — requires `tools` ([`packages/guard/timeout-policy/src/index.ts`](../packages/guard/timeout-policy/src/index.ts))
 - `@deepseek-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
+- `@deepseek-ai/dsh-tool-recall` — requires `tools` ([`packages/memory/tool-recall/src/index.ts`](../packages/memory/tool-recall/src/index.ts))
 - `@deepseek-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))
 - `@deepseek-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
 - `@deepseek-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))

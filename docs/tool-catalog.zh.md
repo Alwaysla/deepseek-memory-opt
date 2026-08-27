@@ -43,6 +43,7 @@
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `followup_task`、`interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | 这 10 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
+| `@deepseek-ai/dsh-tool-recall` | `recall_memory` | `ctx.tools`、`owning Agent session`、`ctx.sessionProjections (optional, for the memoryIndex read)` | `tool/call`、`tool/result` | - | recall_memory 从持久日志中按每个 memory/archived 条目的被遮蔽 seq 重建压缩归档的历史段，按标签匹配。没有会话投影缝时它不返回任何记忆，因此其结果在重放下确定。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
 
@@ -2080,6 +2081,36 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 来源：[`packages/todo/tool-todo/src/index.ts`](../packages/todo/tool-todo/src/index.ts)
 
 todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。
+
+<a id="deepseek-aidsh-tool-recall"></a>
+
+## `@deepseek-ai/dsh-tool-recall`
+
+### `recall_memory`
+
+按主题标签检索先前被压缩进检查点的对话上下文。检查点会列出它归档时用的标签；传入其中一个或多个标签,即可把完整的原始历史段拉回,以继续依赖它的工作。返回标签匹配的每一段归档。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "tags": {
+      "type": "array",
+      "description": "One or more topic tags to match, e.g. from a checkpoint's tag list.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "tags"
+  ]
+}
+```
+
+来源：[`packages/memory/tool-recall/src/index.ts`](../packages/memory/tool-recall/src/index.ts)
+
+recall_memory 从持久日志中按每个 memory/archived 条目的被遮蔽 seq 重建压缩归档的历史段,按标签匹配。没有会话投影缝时它不返回任何记忆,因此其结果在重放下确定。
 
 <a id="deepseek-aidsh-tool-workflow"></a>
 

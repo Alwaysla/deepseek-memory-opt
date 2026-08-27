@@ -132,6 +132,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Rewrites oversized current tool results through replayable single-node surface replacements before summary compaction.',
   },
   {
+    key: 'memoryTtlPruner',
+    pkg: 'memory-ttl-pruner',
+    title: 'Recalled-memory TTL fold',
+    mode: 'core',
+    consumers: [],
+    note: 'Self-driven from agent/pre-step; folds aged recall_memory results back to a stub through a compaction/prune-priced surface replacement. Empty consumers: no service injects it — it drives its own listener.',
+  },
+  {
     key: 'sessions',
     pkg: 'session',
     title: 'In-memory session store',

@@ -443,3 +443,32 @@
       name: '@deepseek-ai/dsh-agent-presets'
       config:
         default: standard
+
+# ── Tag-indexed memory mode (web profile only) ──────────────────────────────
+# Swap the base compaction backend for the archival one and add the recall tool
+# and TTL pruner. base's spill-local satisfies memory-compaction's spillStore
+# injection; base's session-projection hosts the memoryIndex projection that
+# memory-core registers. A patch cannot rename a row, so the base compaction
+# row is disabled and memory-compaction inserted (both register ctx.compaction).
+- id: compaction-basic
+  disabled: true
+
+- insert:
+    - id: memory-compaction
+      name: '@deepseek-ai/dsh-memory-compaction'
+      config:
+        thresholdRatio: 0.45
+        retainRatio: 0.12
+        maxTokens: 8192
+        compactionRetries: 1
+
+    - id: memory-core
+      name: '@deepseek-ai/dsh-memory-core'
+
+    - id: tool-recall
+      name: '@deepseek-ai/dsh-tool-recall'
+
+    - id: memory-ttl-pruner
+      name: '@deepseek-ai/dsh-memory-ttl-pruner'
+      config:
+        retainSteps: 2

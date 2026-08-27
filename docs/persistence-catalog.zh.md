@@ -500,6 +500,26 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
 
+### `memory/*`
+
+<a id="memoryarchived--log-only"></a>
+
+#### `memory/archived` — log-only
+
+```ts persistence-catalog
+/**
+ * One archived conversation span's index record — log-only, no surfaceOp.
+ * Appended after a compaction transaction commits, so every record refers to
+ * a span already shadowed on the surface. Purely informational: the span's
+ * raw events remain in the log at `shadowedSeqs`, so losing this record loses
+ * only the tag index, never reconstructability.
+ * @param data - the archived span's tags, digest, shadowed seqs, and token count.
+ */
+'memory/archived': MemoryEntry
+```
+
+来源：[`packages/memory/memory-core/src/types.ts:58`](../packages/memory/memory-core/src/types.ts)
+
 ### `permission/*`
 
 <a id="permissionpreset--log-only"></a>
