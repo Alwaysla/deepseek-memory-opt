@@ -42,7 +42,7 @@ describe('splitDigestAndTags', () => {
     expect(splitDigestAndTags(text('body\nTAGS:  ,  ,')).tags).toEqual(['general'])
   })
 
-  it('yields an empty digest when the summary is only a TAGS line', () => {
+  it('yields an empty digest when the summary is only a TAGS line (which the engine rejects downstream)', () => {
     expect(splitDigestAndTags(text('TAGS: a, b'))).toEqual({ digestText: '', tags: ['a', 'b'] })
   })
 

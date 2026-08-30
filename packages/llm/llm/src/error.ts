@@ -39,6 +39,18 @@ export const QUOTA_EXCEEDED_CODE = 'QUOTA'
 export const EMPTY_RESPONSE_CODE = 'EMPTY_RESPONSE'
 
 /**
+ * Canonical provider-neutral code for a response whose token stream collapsed
+ * into the same fragment repeated without end — the decode-layer degeneration
+ * that surfaces as a padding token (`[PAD]`) or one word emitted thousands of
+ * times until the output cap. Adapters that can observe the streamed deltas
+ * classify a run of identical content deltas beyond the configured bound as
+ * this failure and stop the stream, so one degenerate completion cannot fill
+ * the whole `maxTokens` budget or poison later turns. Re-sampling usually
+ * recovers, so retry policy treats it as safe to repeat.
+ */
+export const DEGENERATE_REPETITION_CODE = 'DEGENERATE_REPETITION'
+
+/**
  * Canonical provider-neutral code for a credential that was supplied but
  * cannot be used — malformed rather than absent. Distinct from
  * `MISSING_CREDENTIAL` because the fix differs: correct the stored value

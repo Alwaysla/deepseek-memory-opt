@@ -8,10 +8,20 @@
  * @module dsh-llm-deepseek/translate
  */
 
-import { CallId, EMPTY_RESPONSE_CODE, LlmError } from '@deepseek-ai/dsh-llm'
+import { CallId, DEGENERATE_REPETITION_CODE, EMPTY_RESPONSE_CODE, LlmError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, FinishReason, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import { DONE } from './sse.ts'
 import type { WireChunk, WireUsage } from './types.ts'
+
+/**
+ * Default consecutive-identical-fragment run tolerated before a stream is
+ * classified as degenerate repetition. Deployments tune the real value through
+ * the adapter's `degenerateRepeatLimit` config field; this is the schema
+ * default and the pure-function default, kept in one place so both agree. Set
+ * well above any legitimate run of one repeated token (indentation, ASCII
+ * rules) and far below the tens of thousands a runaway `[PAD]` flood reaches.
+ */
+export const DEFAULT_DEGENERATE_REPEAT_LIMIT = 512
 
 /** One open block under assembly. */
 interface OpenBlock {
@@ -79,11 +89,18 @@ function closeBlock(block: OpenBlock): ContentBlock {
  * Consume SSE data payloads (ending with `[DONE]`) and yield StreamChunks.
  * Malformed JSON payloads abort the stream with `MALFORMED_RESPONSE`.
  * @param payloads - SSE data payloads from {@link parseSse}, `[DONE]`-terminated.
+ * @param repeatLimit - consecutive identical non-empty text/reasoning fragments tolerated before the stream is
+ *   cut as {@link DEGENERATE_REPETITION_CODE}; defaults to {@link DEFAULT_DEGENERATE_REPEAT_LIMIT}.
  * @returns deltas as they arrive; `block-end`s, `usage`, and `finish` are all deferred to the `[DONE]` sentinel.
  *   A `stop` (or absent) finish with no opened blocks is a degenerate provider completion and maps to an
- *   `EMPTY_RESPONSE` error finish instead of a successful empty message.
+ *   `EMPTY_RESPONSE` error finish instead of a successful empty message. A run of the same fragment repeated
+ *   past `repeatLimit` is the decode-layer collapse (`[PAD]` flooding); the stream ends early with a
+ *   `DEGENERATE_REPETITION` error finish so it cannot consume the whole output budget or poison later turns.
  */
-export async function* translate(payloads: AsyncIterable<string>): AsyncGenerator<StreamChunk> {
+export async function* translate(
+  payloads: AsyncIterable<string>,
+  repeatLimit: number = DEFAULT_DEGENERATE_REPEAT_LIMIT,
+): AsyncGenerator<StreamChunk> {
   let nextIndex = 0
   let textBlock: OpenBlock | undefined
   let reasoningBlock: OpenBlock | undefined
@@ -91,6 +108,29 @@ export async function* translate(payloads: AsyncIterable<string>): AsyncGenerato
   const order: OpenBlock[] = []
   let pendingFinish: FinishReason | undefined
   let pendingUsage: TokenUsage | undefined
+
+  // Degeneration detector: the decode-layer collapse streams the SAME fragment
+  // (a padding token, one word) as consecutive deltas until the output cap. A
+  // run past repeatLimit is that collapse; legitimate output never repeats one
+  // fragment hundreds of times in a row. Reasoning and text share one counter
+  // because the collapse happens within whichever block the model is emitting.
+  let runFragment: string | undefined
+  let runCount = 0
+  function degenerate(fragment: string): boolean {
+    if (fragment === runFragment) runCount += 1
+    else { runFragment = fragment; runCount = 1 }
+    return runCount > repeatLimit
+  }
+  const degenerateFinish: StreamChunk = {
+    type: 'finish',
+    reason: {
+      kind: 'error',
+      failure: {
+        message: `model output collapsed into the same fragment repeated past ${repeatLimit} times`,
+        code: DEGENERATE_REPETITION_CODE,
+      },
+    },
+  }
 
   function open(kind: OpenBlock['kind']): OpenBlock {
     const block: OpenBlock = { index: nextIndex++, kind, text: '' }
@@ -137,6 +177,7 @@ export async function* translate(payloads: AsyncIterable<string>): AsyncGenerato
         }
         reasoningBlock.text += reasoning
         yield { type: 'reasoning-delta', index: reasoningBlock.index, text: reasoning }
+        if (degenerate(reasoning)) { yield degenerateFinish; return }
       }
 
       const content = delta?.content
@@ -147,6 +188,7 @@ export async function* translate(payloads: AsyncIterable<string>): AsyncGenerato
         }
         textBlock.text += content
         yield { type: 'text-delta', index: textBlock.index, text: content }
+        if (degenerate(content)) { yield degenerateFinish; return }
       }
 
       for (const call of delta?.tool_calls ?? []) {

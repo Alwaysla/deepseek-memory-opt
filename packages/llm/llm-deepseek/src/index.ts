@@ -70,6 +70,8 @@ export type { DeepSeekFileId as DeepSeekFileIdType } from './file-id.ts'
 export { DeepSeekUploadIndex, deepSeekFileScope } from './upload-index.ts'
 export type { DeepSeekUploadRecord } from './upload-index.ts'
 export type { RequestDefaults } from './serialize.ts'
+import { DEFAULT_DEGENERATE_REPEAT_LIMIT } from './translate.ts'
+export { DEFAULT_DEGENERATE_REPEAT_LIMIT } from './translate.ts'
 export type * from './types.ts'
 
 export const name = 'llm-deepseek'
@@ -120,6 +122,8 @@ export interface Config {
   models?: DeepSeekCatalogModel[]
   /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
   streamIdleTimeoutMs?: number
+  /** Consecutive identical text/reasoning fragments tolerated before the stream is cut as degenerate (default 512). */
+  degenerateRepeatLimit?: number
   /** Maximum accumulated file-referenced image bytes per chat request (default 128 MiB). */
   maxRequestFilesBytes?: number
   /** Maximum accumulated base64 image payload after Files API fallback (default 20 MiB). */
@@ -165,6 +169,7 @@ export const Config: z<Config> = z.object({
   defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW),
   models: z.array(catalogModel).default(DEFAULT_MODELS),
   streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STREAM_IDLE_TIMEOUT_MS),
+  degenerateRepeatLimit: z.number().step(1).min(1).default(DEFAULT_DEGENERATE_REPEAT_LIMIT),
   maxRequestFilesBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_FILES_BYTES),
   maxInlineRequestImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES),
   maxImagesPerRequest: z.number().step(1).min(1).default(DEFAULT_MAX_IMAGES_PER_REQUEST),
@@ -294,6 +299,10 @@ export function resolveAdapterOptions(config: Config, environment?: LaunchEnviro
       `llm-deepseek: streamIdleTimeoutMs must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`,
     )
   }
+  const degenerateRepeatLimit = config.degenerateRepeatLimit ?? DEFAULT_DEGENERATE_REPEAT_LIMIT
+  if (!Number.isInteger(degenerateRepeatLimit) || degenerateRepeatLimit <= 0) {
+    throw new Error('llm-deepseek: degenerateRepeatLimit must be a positive integer')
+  }
   const maxRequestFilesBytes = config.maxRequestFilesBytes ?? DEFAULT_MAX_REQUEST_FILES_BYTES
   if (!Number.isSafeInteger(maxRequestFilesBytes) || maxRequestFilesBytes <= 0) {
     throw new Error('llm-deepseek: maxRequestFilesBytes must be a positive safe integer')
@@ -367,6 +376,7 @@ export function resolveAdapterOptions(config: Config, environment?: LaunchEnviro
     defaultContextWindow: config.defaultContextWindow ?? DEFAULT_CONTEXT_WINDOW,
     models: resolveModels(config.models),
     streamIdleTimeoutMs,
+    degenerateRepeatLimit,
     maxRequestFilesBytes,
     maxInlineRequestImageBytes,
     maxImagesPerRequest,

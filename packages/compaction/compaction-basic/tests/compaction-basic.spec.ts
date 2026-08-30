@@ -1078,6 +1078,21 @@ describe('compaction region transaction', () => {
     expect(session.events.some(event => event.type === 'compaction/summary')).toBe(false)
   })
 
+  it('rejects a summary reduced to no non-empty text without shadowing the region', async () => {
+    const compact = service()
+    compact.summary = [{ type: 'text', text: '   ' }]
+    const session = conversation(2)
+    const nodes = session.surface.nodes
+
+    await expect(compact.compactRegion(
+      nodes[0]!,
+      nodes[2]!,
+      agent(session, MODEL),
+    )).rejects.toThrow(/no non-empty text/)
+    expect(session.events.some(event => event.type === 'compaction/summary')).toBe(false)
+    expect(session.surface.nodes).toEqual(nodes)
+  })
+
   it('lets a model-independent custom summarizer compact without a conversation model', async () => {
     const compact = service()
     const session = Session.create(SessionId('model-less-region'))

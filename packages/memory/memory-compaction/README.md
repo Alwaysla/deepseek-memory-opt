@@ -8,7 +8,7 @@ It reuses `compaction-basic`'s replay-and-price machinery unchanged — token pr
 
 ## What it owns
 
-- **Tagging** — `summaryInstruction()` appends a directive asking the model to end its checkpoint with a `TAGS:` line. The engine parses that line into 3–7 lowercase tags, keeps a clean digest card (the `TAGS:` line never reaches the model), and falls back to a single `general` tag when the model emits none.
+- **Tagging** — `summaryInstruction()` appends a directive asking the model to end its checkpoint with a `TAGS:` line. The engine parses that line into 3–7 lowercase tags, keeps a clean digest card (the `TAGS:` line never reaches the model), and falls back to a single `general` tag when the model emits none. If stripping the `TAGS:` line leaves no digest text — a degenerate checkpoint that is only the tag line — the engine aborts the archival before writing the organized copy or shadowing the span, so the history stays fully visible rather than collapsing behind an empty card.
 - **Organized copy** — the shadowed span is written verbatim as a role-labelled transcript through `ctx.spillStore.saveText` (a required injection), under a tag-derived filename. The locator is recorded on the index entry.
 - **Indexing** — a `memory/archived` record (owned by [`memory-core`](../memory-core/README.md)) is appended after `compactRegion`/`compactNow` commit, carrying the tags, digest, shadowed seqs, and locator. Because indexing runs post-commit, a record never refers to an un-shadowed span.
 - **Idempotence** — the entry id is `entryIdFor(shadowedMessages)`, a content hash. Re-archiving the same span (e.g. after it was recalled and folded back) reuses the id, so the catalog and organized copy never duplicate.

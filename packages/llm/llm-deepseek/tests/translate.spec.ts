@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BlockAssembler, EMPTY_RESPONSE_CODE, LlmError } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, DEGENERATE_REPETITION_CODE, EMPTY_RESPONSE_CODE, LlmError } from '@deepseek-ai/dsh-llm'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import { DONE } from '../src/sse.ts'
 import { mapFinishReason, mapUsage, translate } from '../src/translate.ts'
@@ -346,5 +346,64 @@ describe('translate: defensive tool-call branches', () => {
       DONE,
     )))
     expect(chunks[1]).toEqual({ type: 'tool-call-delta', index: 0, id: 'c', argumentsDelta: '' })
+  })
+})
+
+describe('translate: degenerate repetition', () => {
+  it('cuts a text run that repeats the same fragment past the limit', async () => {
+    const chunks = await collect(translate(feed(
+      firstChunk,
+      { choices: [{ delta: { content: '[PAD]' } }] },
+      { choices: [{ delta: { content: '[PAD]' } }] },
+      { choices: [{ delta: { content: '[PAD]' } }] },
+    ), 2))
+    expect(chunks).toEqual([
+      { type: 'block-start', index: 0, blockType: 'text' },
+      { type: 'text-delta', index: 0, text: '[PAD]' },
+      { type: 'text-delta', index: 0, text: '[PAD]' },
+      { type: 'text-delta', index: 0, text: '[PAD]' },
+      {
+        type: 'finish',
+        reason: {
+          kind: 'error',
+          failure: {
+            message: 'model output collapsed into the same fragment repeated past 2 times',
+            code: DEGENERATE_REPETITION_CODE,
+          },
+        },
+      },
+    ])
+  })
+
+  it('cuts a reasoning run that collapses into one fragment', async () => {
+    const chunks = await collect(translate(feed(
+      firstChunk,
+      { choices: [{ delta: { reasoning_content: 'a' } }] },
+      { choices: [{ delta: { reasoning_content: 'a' } }] },
+    ), 1))
+    const finish = chunks.at(-1)
+    expect(finish).toEqual({
+      type: 'finish',
+      reason: {
+        kind: 'error',
+        failure: {
+          message: 'model output collapsed into the same fragment repeated past 1 times',
+          code: DEGENERATE_REPETITION_CODE,
+        },
+      },
+    })
+  })
+
+  it('resets the run when a different fragment breaks the streak', async () => {
+    const chunks = await collect(translate(feed(
+      firstChunk,
+      { choices: [{ delta: { content: 'x' } }] },
+      { choices: [{ delta: { content: 'x' } }] },
+      { choices: [{ delta: { content: 'y' } }] },
+      { choices: [{ delta: { content: 'x' } }] },
+      { choices: [{ delta: {}, finish_reason: 'stop' }] },
+      DONE,
+    ), 2))
+    expect(chunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'stop' } })
   })
 })
