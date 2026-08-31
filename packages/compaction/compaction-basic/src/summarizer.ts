@@ -116,8 +116,7 @@ export type SummaryResult = {
  * @param input - replayed conversation prefix (system, tools, and leading messages) to condense.
  * @param agent - supplies routed-model history, fallback model, and session id.
  * @param signal - optional cancellation forwarded to the adapter.
- * @param instruction - final-user-message directive; a subclass backend overrides it to request a
- *   different checkpoint shape. Defaults to {@link COMPACTION_INSTRUCTION}.
+ * @param instruction - final-user-message directive; a subclass backend overrides it to request a different checkpoint shape. Defaults to {@link COMPACTION_INSTRUCTION}.
  * @returns safe text-only summary blocks and the exact call envelope and output.
  */
 export async function summarizeWithLlm(

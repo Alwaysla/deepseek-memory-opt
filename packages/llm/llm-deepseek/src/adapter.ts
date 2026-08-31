@@ -87,12 +87,6 @@ export interface DeepSeekConnectionOptions {
   models: readonly DeepSeekCatalogModel[]
   /** Maximum provider idle time while one stream read is outstanding. */
   streamIdleTimeoutMs: number
-  /**
-   * Consecutive identical non-empty text/reasoning fragments tolerated before
-   * the stream is cut as `DEGENERATE_REPETITION` — the decode-layer collapse
-   * that floods `[PAD]` or one word until the output cap.
-   */
-  degenerateRepeatLimit: number
   /** Maximum accumulated file-referenced image bytes in one request. */
   maxRequestFilesBytes: number
   /** Maximum accumulated base64 image payload after Files API fallback. */
@@ -665,7 +659,7 @@ export class DeepSeekAdapter extends LlmAdapter {
         throw new LlmError('DeepSeek API returned no response body', 'EMPTY_RESPONSE')
       }
 
-      yield* translate(parseSse(response.body, onActivity), connection.degenerateRepeatLimit)
+      yield* translate(parseSse(response.body, onActivity))
       return
     }
   }

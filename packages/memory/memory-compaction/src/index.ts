@@ -98,17 +98,6 @@ export class MemoryCompactionEngine extends BasicCompactionEngine {
     const entryId = entryIdFor(input.messages)
     const result = await super.summarize(input, agent, signal)
     const { digestText, tags } = splitDigestAndTags(result.summary)
-    // The base summarizer guarantees non-empty output, but a checkpoint that is
-    // only a TAGS line leaves no digest after the tag line is stripped. Fail
-    // here — before writing the organized copy or shadowing the span — rather
-    // than replace the history with a card that carries only the fixed framing.
-    // The compaction transaction rejects the same case as a final backstop.
-    if (digestText.trim().length === 0) {
-      throw new Error(
-        'memory-compaction: the summarizer produced retrieval tags but no digest; '
-        + 'aborting archival rather than shadowing the span with an empty checkpoint card',
-      )
-    }
     const locator = await this.archive(agent, entryId, tags, input.messages)
     this.pendingArchive = { entryId, tags, digest: digestText, locator }
     return { ...result, summary: [{ type: 'text', text: digestText }] }

@@ -6,7 +6,7 @@
  * card, the spilled copy, idempotent re-archival, and the manual /compact path.
  */
 
-import { mkdtemp, readdir, readFile } from 'node:fs/promises'
+import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -33,18 +33,14 @@ const CHECKPOINT = '## Current Work\n- wiring the auth flow\n\nTAGS: auth, sqlit
 // Compact aggressively: a low threshold makes the next turn's pre-step pressure-compact.
 const AUTO_CONFIG = { auto: true, thresholdRatio: 0.005, retainRatio: 0.001 } as const
 
-/** A mock model: normal turns answer briefly; the summarization call returns the configured checkpoint. */
+/** A mock model: normal turns answer briefly; the summarization call returns the tagged checkpoint. */
 class MockModel extends LlmAdapter {
-  constructor(private readonly checkpoint: string = CHECKPOINT) {
-    super()
-  }
-
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({ provider, id: model, name: model, context: { contextWindow: 100_000 } })
   }
 
   override async * stream(options: { messages: readonly Message[]; purpose?: string }): AsyncIterable<StreamChunk> {
-    const text = options.purpose === 'compaction' ? this.checkpoint : 'ok'
+    const text = options.purpose === 'compaction' ? CHECKPOINT : 'ok'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'block-end', index: 0, block: { type: 'text', text } }
     yield { type: 'finish', reason: { kind: 'stop' } }
@@ -55,22 +51,21 @@ interface Harness {
   ctx: Context
   agent: Agent
   engine: MemoryCompactionEngine
-  root: string
 }
 
 let sessionCounter = 0
 
-async function harness(config: Record<string, unknown> = AUTO_CONFIG, model: MockModel = new MockModel()): Promise<Harness> {
+async function harness(config: Record<string, unknown> = AUTO_CONFIG): Promise<Harness> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(TokenMeter)
   const root = await mkdtemp(join(tmpdir(), 'dsh-memory-'))
   await ctx.plugin(LocalSpillStore, { root })
-  ctx.llm.registerAdapter([MODEL], model)
+  ctx.llm.registerAdapter([MODEL], new MockModel())
   const engine = new MemoryCompactionEngine(ctx, config)
   const agent = ctx.agentLoop.create(SessionId(`memory-${sessionCounter++}`), { provider: MODEL, model: MODEL })
-  return { ctx, agent, engine, root }
+  return { ctx, agent, engine }
 }
 
 /** Run two turns carrying large history, then a third whose pre-step pressure-compacts the older span. */
@@ -134,22 +129,5 @@ describe('MemoryCompactionEngine archival', () => {
     const h = await harness({ auto: false })
     expect(await h.engine.compactNow(h.agent, SIGNAL)).toBeNull()
     expect(archivedRecords(h.agent.session)).toHaveLength(0)
-  })
-
-  it('aborts without archiving, spilling, or shadowing when the checkpoint is only a TAGS line', async () => {
-    const h = await harness({ auto: false }, new MockModel('TAGS: auth, sqlite'))
-    h.agent.followup(userMessage(HISTORY))
-    await h.agent.whenIdle()
-    const before = [...h.agent.session.surface.nodes]
-
-    await expect(h.engine.compactNow(h.agent, SIGNAL)).rejects.toThrow(/could not produce a smaller summary/)
-
-    // No index record, no shadowing: the history stays fully visible.
-    expect(archivedRecords(h.agent.session)).toHaveLength(0)
-    expect(h.agent.session.events.some(event => event.type === 'compaction/summary')).toBe(false)
-    expect(h.agent.session.surface.nodes).toEqual(before)
-    // No organized copy was written, so the failed archival leaves no orphan file.
-    const entries = await readdir(h.root, { recursive: true, withFileTypes: true })
-    expect(entries.filter(entry => entry.isFile())).toHaveLength(0)
   })
 })

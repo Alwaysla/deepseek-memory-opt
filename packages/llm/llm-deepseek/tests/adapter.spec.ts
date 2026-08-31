@@ -18,7 +18,7 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { getOrCreateAnonymousUserId, type AnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
-import { DeepSeekAdapter, DEFAULT_DEGENERATE_REPEAT_LIMIT, resolveAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek'
+import { DeepSeekAdapter, resolveAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek'
 import { httpErrorCode, resolveRequestImagePolicy } from '../src/adapter.ts'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
@@ -1624,8 +1624,6 @@ describe('plugin registration and config', () => {
 
   it('defaults an adapter-supplied catalog entry to text input', async () => {
     const connection = resolveAdapterOptions({ models: [] })
-    expect(connection.degenerateRepeatLimit).toBe(DEFAULT_DEGENERATE_REPEAT_LIMIT)
-    expect(resolveAdapterOptions({ degenerateRepeatLimit: 4 }).degenerateRepeatLimit).toBe(4)
     const adapter = new DeepSeekAdapter({
       options: () => ({ ...connection, models: [{ id: 'adapter-model' }] }),
       resolveApiKey: () => Promise.resolve('k'),
@@ -1817,22 +1815,6 @@ describe('plugin registration and config', () => {
         baseURL: 'http://127.0.0.1:1',
         maxTokens,
       })).rejects.toThrow(/maxTokens/)
-      expect(ctx.llm.listProviders()).toEqual([])
-    },
-  )
-
-  it.each([0, 1.5])(
-    'rejects invalid adapter-wide degenerateRepeatLimit %s',
-    async (degenerateRepeatLimit) => {
-      expect(() => resolveAdapterOptions({ degenerateRepeatLimit }))
-        .toThrow(/degenerateRepeatLimit must be a positive integer/)
-
-      const ctx = new Context()
-      await ctx.plugin(LlmRuntime)
-      await expect(ctx.plugin(LlmDeepSeek, {
-        baseURL: 'http://127.0.0.1:1',
-        degenerateRepeatLimit,
-      })).rejects.toThrow(/degenerateRepeatLimit/)
       expect(ctx.llm.listProviders()).toEqual([])
     },
   )

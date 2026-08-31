@@ -356,15 +356,7 @@ function prepareCompaction(
   }
 }
 
-/**
- * Run the summarizer and frame its replacement checkpoint. Rejects a summary
- * with no non-empty text before it can shadow the region: this transaction
- * replaces the selected history with the checkpoint, so an empty summary would
- * destroy that history behind a card carrying only the fixed framing. The base
- * summarizer already fails closed on empty output, but a subclass that
- * post-processes the summary (e.g. stripping a trailing tag line) can reduce it
- * to nothing, so the shadow decision enforces non-emptiness itself.
- */
+/** Run the summarizer and frame its replacement checkpoint. */
 async function summarizeCompaction(
   dependencies: RegionDependencies,
   prepared: PreparedCompaction,
@@ -374,11 +366,6 @@ async function summarizeCompaction(
   signal?: AbortSignal,
 ): Promise<SummarizedCompaction> {
   const summaryResult = await dependencies.summarize(prepared.input, agent, signal)
-  if (!summaryResult.summary.some(block => block.type === 'text' && block.text.trim().length > 0)) {
-    throw new Error(
-      'compaction summary has no non-empty text; refusing to replace the region with an empty checkpoint',
-    )
-  }
   const checkpointMessage = createUserMessage({
     content: frameSummary(summaryResult.summary),
     source: compactCheckpointSource(compactionId, sourceCommandId),
