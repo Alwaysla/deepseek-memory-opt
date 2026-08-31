@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  ConversationMatch, ConversationNodeContext, ConversationNodeDefinition,
+  ConversationLocation, ConversationMatch, ConversationNodeContext, ConversationNodeDefinition,
   RunningToolCall, ToolCallBlock, ToolResultNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-client-runtime/client'
@@ -31,6 +31,12 @@ interface ProjectedBlockCache {
 }
 
 const projectedBlocks = new WeakMap<ToolCallBlock, ProjectedBlockCache>()
+
+function scopedCallId(location: ConversationLocation, callId: unknown): string {
+  return location.kind === 'step' && location.turn.start !== undefined
+    ? `${location.turn.turn}:${location.step.step}:${String(callId)}`
+    : String(callId)
+}
 
 function jsonArguments(value: unknown): string {
   return JSON.stringify(value)
@@ -236,15 +242,17 @@ function fallbackState(context: ConversationNodeContext<ToolState>): ToolState |
 export const toolDefinition: ConversationNodeDefinition<ToolState> = {
   kind: 'tool-call',
   target: 'chat',
-  match: (event) => {
-    if (event.type === 'tool/call') return { id: String(event.data.callId), role: 'start' }
+  match: (event, location) => {
+    if (event.type === 'tool/call') {
+      return { id: scopedCallId(location, event.data.callId), role: 'start' }
+    }
     if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
-      return { id: String(event.data.message.source.callId), role: 'update' }
+      return { id: scopedCallId(location, event.data.message.source.callId), role: 'update' }
     }
     if (event.type === 'tool/code-dispatch-start' || event.type === 'tool/code-dispatch') {
       const rootCallId: unknown = event.data.rootCallId
       return typeof rootCallId === 'string' && rootCallId !== ''
-        ? { id: rootCallId, role: 'update' }
+        ? { id: scopedCallId(location, rootCallId), role: 'update' }
         : null
     }
     return null

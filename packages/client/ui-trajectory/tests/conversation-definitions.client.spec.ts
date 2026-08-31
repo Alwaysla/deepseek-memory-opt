@@ -87,6 +87,15 @@ function assistantMessage(id: string, text: string) {
   }
 }
 
+function toolResult(callId: string, text: string) {
+  return {
+    id: `result-${callId}-${text}`,
+    role: 'tool',
+    content: [{ type: 'tool-result', callId, content: [{ type: 'text', text }] }],
+    source: { kind: 'tool', callId },
+  }
+}
+
 describe('Trajectory conversation Definitions', () => {
   it('assembles streaming usage, preserves retry facts, and materializes interruption', () => {
     const value = assembler([
@@ -216,6 +225,36 @@ describe('Trajectory conversation Definitions', () => {
       callId: 'child',
       call: { name: 'read' },
     }])
+  })
+
+  it('keeps Tool results separate when a provider reuses a call id across Turns', () => {
+    const current = snapshot(assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'tool/call', {
+        turn: 1, step: 1, callId: 'bash_0', name: 'bash', arguments: '{"command":"first"}',
+      }),
+      at(4, 'tool/result', {
+        turn: 1, step: 1, message: toolResult('bash_0', 'first result'),
+      }),
+      at(5, 'step/end', { turn: 1, step: 1 }),
+      at(6, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+      at(7, 'turn/start', { turn: 2 }),
+      at(8, 'step/start', { turn: 2, step: 1 }),
+      at(9, 'tool/call', {
+        turn: 2, step: 1, callId: 'bash_0', name: 'bash', arguments: '{"command":"second"}',
+      }),
+      at(10, 'tool/result', {
+        turn: 2, step: 1, message: toolResult('bash_0', 'second result'),
+      }),
+    ]))
+
+    const tools = current.eventNodes.filter(node => node.kind === 'tool-result')
+    expect(tools).toHaveLength(2)
+    expect(tools.map(node => node.call?.argsRaw)).toEqual([
+      '{"command":"first"}',
+      '{"command":"second"}',
+    ])
   })
 
   it('assembles compaction lifecycle, checkpoint replacement, and orphan interruption', () => {

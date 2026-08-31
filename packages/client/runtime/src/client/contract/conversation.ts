@@ -173,11 +173,13 @@ export interface ConversationNodeDefinition<State = unknown> {
   /** Sole view target owned by this Definition; omitted for state-only Contexts. */
   readonly target?: string
   /**
-   * Extract this Definition's stable business identity from one event.
+   * Extract this Definition's stable business identity from one event and its
+   * engine-resolved Turn/Step placement.
    * @param event - raw Session event; no Context or history access is available.
+   * @param location - immutable Location resolved for this event.
    * @returns identity and lifecycle role, or null when unrelated.
    */
-  match(event: SessionEvent): ConversationMatchResult | null
+  match(event: SessionEvent, location: ConversationLocation): ConversationMatchResult | null
   /**
    * Create State from the unique start Match.
    * @param context - complete evidence currently collected for the Context.

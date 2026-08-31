@@ -1,7 +1,6 @@
 import type {
   ConversationSnapshot, ToolCallBlock,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import { conversationContextKey } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 
 function toolNode(node: ReturnType<ConversationSnapshot['chat']['nodes']['get']>): ChatNode<'tool-call'> | undefined {
@@ -11,14 +10,20 @@ function toolNode(node: ReturnType<ConversationSnapshot['chat']['nodes']['get']>
 /**
  * Read one root Tool lifecycle through the internal Chat Node index.
  * @param snapshot - current Conversation snapshot.
- * @param rootCallId - root call identity and Tool Context identity.
- * @returns root lifecycle when it is materialized in the current window.
+ * @param rootCallId - provider-assigned root call identity.
+ * @returns newest matching root lifecycle materialized in the current window.
  */
 export function rootToolCall(
   snapshot: ConversationSnapshot,
   rootCallId: string,
 ): ToolCallBlock | undefined {
-  return toolNode(snapshot.chat.nodes.get(conversationContextKey('tool-call', rootCallId)))?.data.root
+  for (let index = snapshot.chat.order.length - 1; index >= 0; index--) {
+    const key = snapshot.chat.order[index]
+    if (key === undefined) continue
+    const root = toolNode(snapshot.chat.nodes.get(key))?.data.root
+    if (root?.callId === rootCallId) return root
+  }
+  return undefined
 }
 
 /**

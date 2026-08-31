@@ -358,6 +358,41 @@ describe('built-in conversation node Definitions', () => {
     expect((withSecondChild?.data as ToolChatData).root.subCalls[0]).toBe(firstChild)
   })
 
+  it('keeps Tool lifecycles separate when a provider reuses a call id across Turns', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'tool/call', { turn: 1, step: 1, callId: 'bash_0', name: 'bash', arguments: '{"command":"first"}' }),
+      at(4, 'tool/result', {
+        turn: 1,
+        step: 1,
+        message: toolResult('bash_0', 'first result'),
+      }, { surfaceOp: 'append' }),
+      at(5, 'step/end', { turn: 1, step: 1 }),
+      at(6, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+      at(7, 'turn/start', { turn: 2 }),
+      at(8, 'step/start', { turn: 2, step: 1 }),
+      at(9, 'tool/call', { turn: 2, step: 1, callId: 'bash_0', name: 'bash', arguments: '{"command":"second"}' }),
+      at(10, 'tool/result', {
+        turn: 2,
+        step: 1,
+        message: toolResult('bash_0', 'second result'),
+      }, { surfaceOp: 'append' }),
+    ])
+
+    const tools = snapshot(value).order
+      .map(key => snapshot(value).nodes.get(key))
+      .filter(candidate => candidate?.kind === 'tool-call')
+    expect(tools).toHaveLength(2)
+    expect(tools.map((candidate) => {
+      const root = (candidate?.data as ToolChatData).root
+      return 'kind' in root ? root.call?.argsRaw : root.argsRaw
+    })).toEqual([
+      '{"command":"first"}',
+      '{"command":"second"}',
+    ])
+  })
+
   it('prepends an older turn without replacing already materialized nodes', () => {
     const value = assembler([
       at(20, 'turn/start', { turn: 2 }),

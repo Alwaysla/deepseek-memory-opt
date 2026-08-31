@@ -41,17 +41,17 @@ Definition 不持有跨 Session 的可变业务数据。每个 Session 的 Conte
 
 #### `kind`、业务 ID 与 Context key
 
-`match()` 返回的 `id` 只要求在当前 Definition 内稳定。Tool 的 ID 可以是 call ID，Assistant 的 ID 可以是 `turn:step`，Inbox 的 ID 可以是 splice Event seq。
+`match()` 返回的 `id` 只要求在当前 Definition 内稳定。由于 provider 可能在后续请求中复用 call ID，Tool 生命周期使用 `turn:step:callId`；Assistant ID 可以是 `turn:step`，Inbox ID 可以是 splice Event seq。
 
 Assembler 使用 `conversationContextKey(kind, id)` 组合无碰撞 key；不同 Definition 即使返回相同 `id` 也不会共享 Context。最终 view Node 必须沿用这个 engine-owned key，不能把 `seq` 或渲染位置当 identity。
 
 每个 `(kind, id)` 最多存在一个 start Match。第二个 start 会立即报错；Definition 需要表达新生命周期时必须返回新 ID。
 
-#### `match(event)`
+#### `match(event, location)`
 
-`match(event)` 只读取当前原始 `SessionEvent`，返回 `{ id, role: 'start' | 'update' }` 或 `null`。它拿不到 Context、历史、Reader、Location 或 view envelope。
+`match(event, location)` 只读取当前原始 `SessionEvent` 及引擎解析的 Turn/Step Location，返回 `{ id, role: 'start' | 'update' }` 或 `null`。它拿不到 Context、历史、Reader 或 view envelope。
 
-这项限制使单条 Event 的路由成本只随已注册 Definition 数量增长。Assembler 不会为了判断一条 update 属于谁而遍历该 Definition 的历史 Context。
+解析后的 Location 让 Definition 可以限定 producer-local 关联值的作用域，而无需扫描历史。路由成本仍只随已注册 Definition 数量增长，Assembler 不会为了判断一条 update 属于谁而遍历该 Definition 的历史 Context。
 
 start、result、resource、checkpoint 及业务自有终止 Event 必须携带或可直接推导同一 ID。若单个 Event 不能算出 ID，生产 Event 的协议负责补足关联字段，Client 不通过“最近一个未完成对象”猜测。
 
@@ -261,7 +261,7 @@ Chat `order` 的结构性变化仍可能重排当前可见 key；纯 data 更新
 | Next-step Inbox / `inbox-next-step` | splice Event seq | 每条目标为 next-step 的 `agent/inbox/spliced` | 无 | 同样形成逐指令瞬间态，claimed 集合供 Message 读取 |
 | Message / `input-message` | message ID | append-surface `user/message` | 无 | 根据 source 生成 context message，或读取最近 next-step Inbox 判断 user/steering |
 | Assistant / `assistant-step` | `turn:step` | `step/start` | `assistant/chunk`、final `assistant/message`、同 step Retry | 聚合 blocks、usage、首 token 时间、final 和 retry 隐藏状态，并发布同 key Step data |
-| Tool / `tool-call` | root call ID | root `tool/call` | root result、Code Dispatch start/result | 聚合 root、children 和 parent Map；Dispatch Event 用 `rootCallId` 精确路由 |
+| Tool / `tool-call` | `turn:step:rootCallId`；无边界的局部窗口使用 root call ID | root `tool/call` | root result、Code Dispatch start/result | 聚合 root、children 和 parent Map；Dispatch Event 使用同一 Location-scoped `rootCallId` |
 | Command / `command` | command ID | `command/run` | `command/done`、带 source command ID 的 compact lifecycle/checkpoint | 聚合 command outcome 和手动压缩证据 |
 | Automatic Compaction / `compaction` | compaction ID | 无 source command ID 的 `compaction/start` | summary、end、replacement checkpoint | 聚合 summary/checkpoint；checkpoint 足够时可在缺 start 下 fallback |
 | Retry / `model-retry` | retry ID | attempt 1 的 `llm/retry` | 后续 `llm/retry` 与 `llm/retry-started` | 聚合同一 RetryId 的 attempts 与 scheduled/started 状态 |
@@ -292,7 +292,7 @@ Retry、Assistant 和 Turn Tail 展示了同一 Event 被多个 Definition 独�
 
 Assistant、Turn Tail 和 Deliverables 展示了 Location data 的分层组合。Assistant 负责写好每个 Step 的 `assistant-step` data；Turn Tail 从这些 Step values 计算 `turn-tail` data；Deliverables 独立维护同一 Turn 的 `deliverables` data。消费者只读取声明合并后的 key，不扫描其他业务 Node，也不取得提供方的 Context State。
 
-Tool 和 Command 展示了多 Event 聚合：生产者提供共同 ID，Context 在业务内部构树或整合 Compaction，不把配对工作推给 Chat Builder。
+Tool 和 Command 展示了多 Event 聚合：生产者提供共同关联值，Definition 把 request-local 值与解析后的 Location 组合，Context 再在业务内部构树或整合 Compaction，不把配对工作推给 Chat Builder。
 
 Compaction 和历史 Tool result 展示了缺 start 时的业务 fallback。引擎不统一规定“没有 start 就不渲染”；Definition 根据当前 Matches 是否足够自行决定。
 
@@ -337,7 +337,7 @@ target 专属 Trajectory Definition、保留的 stage model、Steering 适配、
 ```text
 Session Event window
   -> ConversationNodeAssembler
-       -> Definition.match(event) -> (kind, id, start/update)
+       -> Definition.match(event, location) -> (kind, id, start/update)
        -> Context matches + State + Location
        -> Definition.buildLocationData(step -> turn)
             -> StepLocation.data / TurnLocation.data
@@ -351,7 +351,7 @@ Session Event window
 
 Runtime tests 固定 Definition 生命周期注册、exact-ID append、update-before-start 收集与 start 后正序 replay、prepend identity、Reader window-gap 修复、传递依赖、Location closure、Step→Turn data phase order、Location data replacement、publication cadence、非法撤回和 per-target Builder。
 
-Conversation tests 覆盖全部内建 Chat Definition、Assistant Step data、Turn Tail 与 Deliverables Turn data、Chat 排序和结构共享、selector isolation、Assistant/Tool running-to-settled identity、nested Code Dispatch、steering、Compaction、Retry、interruption、load-older anchoring 和 slot dispatch。Trajectory tests 则覆盖它独立注册的 Message、Assistant、Tool、Compaction、Request-header 与 boundary Definition，以及继续保留的 stage-oriented view model。
+Conversation tests 覆盖全部内建 Chat Definition、Assistant Step data、Turn Tail 与 Deliverables Turn data、Chat 排序和结构共享、selector isolation、Assistant/Tool running-to-settled identity、provider 跨 Turn 复用同一 Tool call ID、nested Code Dispatch、steering、Compaction、Retry、interruption、load-older anchoring 和 slot dispatch。Trajectory tests 同样覆盖 call ID 复用，并覆盖它独立注册的 Message、Assistant、Tool、Compaction、Request-header 与 boundary Definition，以及继续保留的 stage-oriented view model。
 
 Slot type/runtime tests 固定父注册必须提供声明的 common inject、`hookContext` 类型、不同 Node context 的 Hook 隔离、factory/Hook identity 稳定，以及无关 Session publication 不重渲染业务 renderer。原 entry-owned Observable Hook 测试继续固定未使用 contextual factory 的路径。
 

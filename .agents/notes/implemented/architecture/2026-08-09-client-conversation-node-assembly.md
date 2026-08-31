@@ -41,17 +41,17 @@ A Definition holds no mutable business data across Sessions. Each Session's Asse
 
 #### `kind`, business ID, and Context key
 
-The `id` returned by `match()` only needs to be stable within its Definition. A Tool ID can be a call ID, an Assistant ID can be `turn:step`, and an Inbox ID can be the splice Event seq.
+The `id` returned by `match()` only needs to be stable within its Definition. A Tool lifecycle uses `turn:step:callId` because providers may reuse call IDs in later requests; an Assistant ID can be `turn:step`, and an Inbox ID can be the splice Event seq.
 
 The Assembler uses `conversationContextKey(kind, id)` to make a collision-free key. Definitions that return the same `id` still do not share a Context. The final view Node must retain this engine-owned key and cannot use `seq` or render position as identity.
 
 Each `(kind, id)` has at most one start Match. A second start fails immediately; a Definition must return a new ID to represent a new lifecycle.
 
-#### `match(event)`
+#### `match(event, location)`
 
-`match(event)` reads only the current raw `SessionEvent` and returns `{ id, role: 'start' | 'update' }` or `null`. It cannot access a Context, history, a Reader, a Location, or the view envelope.
+`match(event, location)` reads the current raw `SessionEvent` and its engine-resolved Turn/Step Location, then returns `{ id, role: 'start' | 'update' }` or `null`. It cannot access a Context, history, Reader, or view envelope.
 
-This restriction makes one Event's routing cost depend only on the number of registered Definitions. The Assembler never scans a Definition's historical Contexts to decide which one owns an update.
+The resolved Location lets a Definition scope a producer-local correlation value without scanning history. Routing cost still depends only on the number of registered Definitions, and the Assembler never scans a Definition's historical Contexts to decide which one owns an update.
 
 Start, result, resource, checkpoint, and business-owned terminal Events must carry or directly imply the same ID. If one Event cannot yield that ID, its producer extends the Event protocol; the Client does not guess from the "nearest unfinished object."
 
@@ -261,7 +261,7 @@ Page size, the number of history loads, and RAF coalescing affect only when evid
 | Next-step Inbox / `inbox-next-step` | Splice Event seq | Each `agent/inbox/spliced` targeting next-step | None | Build the same per-instruction instantaneous state; Message reads its claimed set |
 | Message / `input-message` | Message ID | Append-surface `user/message` | None | Use source for a context message, or read the nearest next-step Inbox to distinguish user from steering |
 | Assistant / `assistant-step` | `turn:step` | `step/start` | `assistant/chunk`, final `assistant/message`, and same-step Retry | Aggregate blocks, usage, first-token time, final evidence, and retry-hidden state, then publish same-key Step data |
-| Tool / `tool-call` | Root call ID | Root `tool/call` | Root result and Code Dispatch start/result | Aggregate the root, children, and parent Map; Dispatch Events route exactly through `rootCallId` |
+| Tool / `tool-call` | `turn:step:rootCallId`; root call ID in a boundary-less partial window | Root `tool/call` | Root result and Code Dispatch start/result | Aggregate the root, children, and parent Map; Dispatch Events use the same Location-scoped `rootCallId` |
 | Command / `command` | Command ID | `command/run` | `command/done` and compact lifecycle/checkpoint Events carrying a source command ID | Aggregate command outcome and manual-compaction evidence |
 | Automatic Compaction / `compaction` | Compaction ID | `compaction/start` without a source command ID | Summary, end, and replacement checkpoint | Aggregate summary/checkpoint; sufficient checkpoint evidence supports fallback without a start |
 | Retry / `model-retry` | Retry ID | Attempt 1 `llm/retry` | Later `llm/retry` and `llm/retry-started` | Aggregate one RetryId's attempts and scheduled/started state |
@@ -292,7 +292,7 @@ Retry, Assistant, and Turn Tail demonstrate independent claims on one Event. Eac
 
 Assistant, Turn Tail, and Deliverables demonstrate layered Location data composition. Assistant writes `assistant-step` data for each Step; Turn Tail derives `turn-tail` data from those Step values; Deliverables independently maintains `deliverables` data for the same Turn. Consumers read only declaration-merged keys, do not scan another business's Nodes, and cannot obtain the provider's Context State.
 
-Tool and Command demonstrate multi-Event aggregation: the producer supplies a shared ID, and the Context builds a tree or integrates Compaction internally instead of pushing pairing into the Chat Builder.
+Tool and Command demonstrate multi-Event aggregation: the producer supplies a shared correlation value, the Definition combines request-local values with the resolved Location, and the Context builds a tree or integrates Compaction internally instead of pushing pairing into the Chat Builder.
 
 Compaction and historical Tool results demonstrate business fallback without a start. The engine does not impose "no start means no rendering"; each Definition decides whether current Matches are sufficient.
 
@@ -337,7 +337,7 @@ The target-specific Trajectory Definitions, retained stage model, Steering adapt
 ```text
 Session Event window
   -> ConversationNodeAssembler
-       -> Definition.match(event) -> (kind, id, start/update)
+       -> Definition.match(event, location) -> (kind, id, start/update)
        -> Context matches + State + Location
        -> Definition.buildLocationData(step -> turn)
             -> StepLocation.data / TurnLocation.data
@@ -351,7 +351,7 @@ Session Event window
 
 Runtime tests pin Definition lifecycle registration, exact-ID append, update-before-start collection followed by forward replay after start, prepend identity, Reader window-gap repair, transitive dependencies, Location closure, Step→Turn data phase order, Location data replacement, publication cadence, illegal withdrawal, and per-target Builders.
 
-Conversation tests cover every built-in Chat Definition, Assistant Step data, Turn Tail and Deliverables Turn data, Chat ordering and structural sharing, selector isolation, Assistant and Tool running-to-settled identity, nested Code Dispatch, steering, Compaction, Retry, interruption, load-older anchoring, and slot dispatch. Trajectory tests cover its independently registered Message, Assistant, Tool, Compaction, Request-header, and boundary Definitions together with the preserved stage-oriented view model.
+Conversation tests cover every built-in Chat Definition, Assistant Step data, Turn Tail and Deliverables Turn data, Chat ordering and structural sharing, selector isolation, Assistant and Tool running-to-settled identity, provider reuse of one Tool call ID across Turns, nested Code Dispatch, steering, Compaction, Retry, interruption, load-older anchoring, and slot dispatch. Trajectory tests cover the same reused-call-ID case plus its independently registered Message, Assistant, Tool, Compaction, Request-header, and boundary Definitions together with the preserved stage-oriented view model.
 
 Slot type/runtime tests pin required parent-provided common inject, the `hookContext` type, Hook isolation across Node contexts, stable factory/Hook identity, and the absence of business-renderer rerenders for unrelated Session publications. Existing entry-owned Observable Hook tests continue to pin the path that does not use a contextual factory.
 

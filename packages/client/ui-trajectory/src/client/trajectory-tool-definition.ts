@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  ConversationMatch, ConversationNodeContext, ConversationNodeDefinition,
+  ConversationLocation, ConversationMatch, ConversationNodeContext, ConversationNodeDefinition,
   RunningToolCall, ToolCallBlock, ToolResultNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-tools/types'
@@ -10,6 +10,12 @@ import { trajectoryNode } from './trajectory-definition-common.ts'
  * state machines independent; see ../../../../../.agents/notes/implemented/
  * architecture/2026-08-09-client-conversation-node-assembly.md. */
 const MAX_DEPTH = 256
+
+function scopedCallId(location: ConversationLocation, callId: unknown): string {
+  return location.kind === 'step' && location.turn.start !== undefined
+    ? `${location.turn.turn}:${location.step.step}:${String(callId)}`
+    : String(callId)
+}
 
 interface ToolState {
   readonly rootId: string
@@ -219,15 +225,17 @@ function fallbackState(context: ConversationNodeContext<ToolState>): ToolState |
 const trajectoryToolDefinition: ConversationNodeDefinition<ToolState> = {
   kind: 'trajectory-tool-call',
   target: 'trajectory',
-  match: (event) => {
-    if (event.type === 'tool/call') return { id: String(event.data.callId), role: 'start' }
+  match: (event, location) => {
+    if (event.type === 'tool/call') {
+      return { id: scopedCallId(location, event.data.callId), role: 'start' }
+    }
     if (event.type === 'tool/result') {
-      return { id: String(event.data.message.source.callId), role: 'update' }
+      return { id: scopedCallId(location, event.data.message.source.callId), role: 'update' }
     }
     if (event.type === 'tool/code-dispatch-start' || event.type === 'tool/code-dispatch') {
       const rootCallId: unknown = event.data.rootCallId
       return typeof rootCallId === 'string' && rootCallId !== ''
-        ? { id: rootCallId, role: 'update' }
+        ? { id: scopedCallId(location, rootCallId), role: 'update' }
         : null
     }
     return null
