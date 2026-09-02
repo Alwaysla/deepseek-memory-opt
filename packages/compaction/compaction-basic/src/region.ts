@@ -501,15 +501,21 @@ function buildSummarizationInput(
 ): SummarizationInput {
   const header = session.requestHeader()
   const events = session.events
-  const regionMessages = shadowedSeqs
+  const regionMessages: Message[] = []
+  const messageSeqs: number[] = []
+  for (const seq of shadowedSeqs) {
     // shadowedSeqs are current surface seqs, so each is a valid log index.
     // oxlint-disable-next-line typescript/no-non-null-assertion
-    .map(seq => session.deriveEventMessage(events[seq]!))
-    .filter((message): message is Message => message !== null)
+    const message = session.deriveEventMessage(events[seq]!)
+    if (message === null) continue
+    regionMessages.push(message)
+    messageSeqs.push(seq)
+  }
   return {
     ...header?.system === undefined ? {} : { system: header.system },
     ...header?.tools === undefined ? {} : { tools: header.tools },
     messages: regionMessages,
+    messageSeqs,
   }
 }
 

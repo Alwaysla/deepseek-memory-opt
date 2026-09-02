@@ -1,0 +1,40 @@
+# Keyless real-Loader composition for a resumed session with archived memory.
+
+- id: persistence
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: './.sessions'
+    compression: none
+
+- id: replay
+  name: '@deepseek-ai/dsh-llm-replay'
+  config:
+    file: !!js process.env.DSH_SNAPSHOT_FILE
+    overrideFile: !!js process.env.DSH_SNAPSHOT_OVERRIDE
+
+- id: agent
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    agents: []
+    workspaceContext: false
+    skills:
+      enabled: false
+    toolJobs: false
+    goals: false
+
+- id: session-projection
+  name: '@deepseek-ai/dsh-session-projection'
+
+- id: memory-core
+  name: '@deepseek-ai/dsh-memory-core'
+
+- id: memory-catalog
+  name: '@deepseek-ai/dsh-memory-catalog'
+  config:
+    maxEntries: 10
+    maxTokens: 200
+    digestMaxChars: 80
+
+# Await the persisted resume before the headless driver inspects root agents.
+- id: resumed-agent
+  name: './tests/fixtures/memory-catalog-agent.ts'

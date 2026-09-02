@@ -48,7 +48,7 @@ Status: implemented
 - **在 `summarize()` 内发出专门的 `memory/archived` 事件。** 否决:`summarize()` 缺少被遮蔽 seq,且事务中途追加在事务后续失败时有孤儿记录风险。从 `compactRegion`/`compactNow` 覆写中提交后建索引无孤儿且有 seq。
 - **召回读取 spill 文件。** 作为真相源否决:它使召回依赖外部可变文件系统状态并削弱重放。日志已在记录的 seq 处保存被遮蔽事件,因此召回从那里重建;spill 文件仅作为用户要求的组织化落盘产物保留。
 - **把标签/locator 编码进 `compaction/summary` 事件。** 不可行 —— 该事件形状固定在缝包中 —— 且从面向模型的卡片解析它们很脆弱。`memory-core` 中专门的 `memory/archived` 记录是干净的归属地。
-- **一个系统提示标签目录 section。** 推迟:它需要带会话访问的 agent 作用域装配,而每张卡片的 `TAGS`/召回提示已告诉模型什么可召回。后续版本可加聚合目录。
+- **一个系统提示标签目录 section。** 后续的[有界记忆目录](2026-09-02-bounded-memory-catalog.zh.md)已加入该能力，并提供 Agent 作用域的 Session 访问，且阻止目录进入归档内容。
 
 ## 后果
 

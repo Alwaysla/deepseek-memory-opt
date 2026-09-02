@@ -21,6 +21,7 @@ import type { EntryId, MemoryEntry, MemoryIndexState } from './types.ts'
 // the module edge in the emitted index.d.ts, so aggregate programs consuming the
 // declarations still receive the merges.
 export type * from './types.ts'
+export * from './catalog.ts'
 
 export const name = 'memory-core'
 

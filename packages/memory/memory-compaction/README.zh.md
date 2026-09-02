@@ -4,13 +4,14 @@
 
 [标签化记忆家族](../README.zh.md)的归档压缩后端:`MemoryCompactionEngine` 继承 [`BasicCompactionEngine`](../../compaction/compaction-basic/README.zh.md),并在每次压缩时:(1) 向模型索取检索标签,(2) 通过 `ctx.spillStore` 写一份被遮蔽段的组织化转录副本,(3) 在事务提交后追加一条 `memory/archived` 索引记录。它注册 `ctx.compaction`,取代 `compaction-basic` 成为后端。
 
-它原封不动地复用 `compaction-basic` 的重放与计价机制 —— token 压力、保留策略、摘要调用、持久事务 —— 只定制两处缝:摘要指令与提交后建索引。
+它复用 `compaction-basic` 的 token 压力、保留策略和持久事务机制。摘要调用前，它会从选中消息中移除 `memory:catalog` 运行时上下文节；同一聚合快照中的其他节会保留。
 
 ## 它拥有什么
 
 - **打标签** —— `summaryInstruction()` 追加一条指令,要求模型在检查点末尾输出一行 `TAGS:`。引擎把该行解析为 3–7 个小写标签,保留一张干净的摘要卡片(`TAGS:` 行绝不进入模型),并在模型未产出标签时回退为单个 `general` 标签。
-- **组织化副本** —— 被遮蔽段以带角色标签的转录形式,通过 `ctx.spillStore.saveText`(必需注入)按标签派生的文件名逐字写入。locator 记录在索引条目上。
-- **建索引** —— 一条 `memory/archived` 记录(由 [`memory-core`](../memory-core/README.zh.md) 拥有)在 `compactRegion`/`compactNow` 提交后追加,携带标签、摘要、被遮蔽 seq 与 locator。因为建索引在提交后运行,记录绝不指向未被遮蔽的段。
+- **组织化副本** —— 归档可见段以带角色标签的转录形式，通过 `ctx.spillStore.saveText`（必需注入）按标签派生的文件名写入。locator 记录在索引条目上。
+- **建索引** —— 一条 `memory/archived` 记录（由 [`memory-core`](../memory-core/README.zh.md) 拥有）在 `compactRegion`/`compactNow` 提交后追加，携带标签、摘要、归档可见 seq 与 locator。因为建索引在提交后运行，记录绝不指向未被遮蔽的段。通用压缩结果仍保留完整的位置替换来源。
+- **目录排除** —— `memory:catalog` 节会在摘要、哈希、spill 输出和归档索引之前移除。若聚合运行时上下文快照还含其他节，则会保留并重新渲染这些节；由于持久节点曾含目录材料，该节点的 seq 不进入记忆归档。
 - **幂等** —— 条目 id 为 `entryIdFor(被遮蔽消息)`,即内容哈希。重新归档同一段(例如它被召回后又折叠回去)复用同一 id,因此目录和组织化副本绝不重复。
 
 自动压力/溢出路径与手动 `/compact` 路径都会归档。
@@ -39,7 +40,7 @@
 
 #### 模型看到什么
 
-摘要模型收到逐字重放的对话 —— 与上一次路由请求为被遮蔽区所发的相同系统提示、工具 schema 与消息 —— 其后是基础压缩指令加一条追加指令:用一行 3–7 个小写检索标签的 `TAGS:` 行结束检查点。对话模型永不看到这个私有请求;只有返回文本(去掉被解析的 `TAGS:` 行)被存储。
+摘要模型收到移除 `memory:catalog` 节后的选中对话，其后是基础压缩指令加一条追加指令：用一行 3–7 个小写检索标签的 `TAGS:` 行结束检查点。聚合运行时上下文快照中的其他节仍会保留。对话模型永不看到这个私有请求；只有返回文本（去掉被解析的 `TAGS:` 行）被存储。
 
 #### Token 影响
 

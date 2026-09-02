@@ -465,6 +465,13 @@
     - id: memory-core
       name: '@deepseek-ai/dsh-memory-core'
 
+    - id: memory-catalog
+      name: '@deepseek-ai/dsh-memory-catalog'
+      config:
+        maxEntries: 20
+        maxTokens: 1200
+        digestMaxChars: 160
+
     - id: tool-recall
       name: '@deepseek-ai/dsh-tool-recall'
 

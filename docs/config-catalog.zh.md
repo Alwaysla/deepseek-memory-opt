@@ -1441,6 +1441,26 @@ export interface ReconnectConfig {
 
 来源：[`packages/mcp/mcp-client/src/index.ts:98`](../packages/mcp/mcp-client/src/index.ts)
 
+<a id="deepseek-aidsh-memory-catalog"></a>
+
+## `@deepseek-ai/dsh-memory-catalog`
+
+需要：`sessionProjections` · `systemPrompt`
+
+```ts config-catalog
+/** Deployment policy for the bounded memory catalog. */
+export interface Config {
+  /** Maximum recent archive entries shown. Defaults to 20. */
+  maxEntries?: number
+  /** Maximum estimated tokens for the complete publication. Defaults to 1200. */
+  maxTokens?: number
+  /** Maximum characters from each digest before ellipsis. Defaults to 160. */
+  digestMaxChars?: number
+}
+```
+
+来源：[`packages/memory/memory-catalog/src/index.ts:31`](../packages/memory/memory-catalog/src/index.ts)
+
 <a id="deepseek-aidsh-memory-ttl-pruner"></a>
 
 ## `@deepseek-ai/dsh-memory-ttl-pruner`

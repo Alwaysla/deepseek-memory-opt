@@ -29,7 +29,12 @@ import type { Scope } from '@deepseek-ai/dsh-scope'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, UserMessage } from '@deepseek-ai/dsh-session'
 import { canonicalHeader, headerEquals } from '@deepseek-ai/dsh-session'
-import { joinContextSections, renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
+import {
+  RUNTIME_CONTEXT_SOURCE,
+  joinContextSections,
+  renderContextSections,
+  renderPrompt,
+} from '@deepseek-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import type { Context } from '@deepseek-ai/cordis'
 import { RuntimeContextProjection } from './runtime-context.ts'
@@ -239,7 +244,16 @@ export class ReactLoopAgent implements Agent {
       }),
     )
     signal.throwIfAborted()
-    return decision.kind === 'reject' ? decision : { ...decision, assembly }
+    if (decision.kind === 'reject') return decision
+    // A pre-step listener may compact away the retained snapshot after the
+    // initial projection. Reconcile once more so this same request still sees
+    // every active runtime-context section.
+    const reconciled = this.runtimeContext.project(joinContextSections(sections), sections)
+    const messages = reconciled === undefined || decision.messages.some(message =>
+      message.source.kind === 'plugin' && message.source.plugin === RUNTIME_CONTEXT_SOURCE)
+      ? decision.messages
+      : [...decision.messages, reconciled]
+    return { ...decision, messages, assembly }
   }
 
   /** Open one turn before claiming its first proposed step. */

@@ -2081,7 +2081,7 @@ todo_write is session-owned state; UIs render the latest todo/write event as a c
 
 ### `recall_memory`
 
-Retrieve earlier conversation context that was condensed into a checkpoint, by topic tag. A checkpoint lists the tags it archived; pass one or more of those tags to pull the full original span back so you can continue work that depended on it. Returns every archived span whose tags match.
+Retrieve earlier conversation context that was condensed into a checkpoint, by topic tag. The memory catalog lists recent tags and digests; pass one or more of those tags to pull the original span back so you can continue work that depended on it. Returns every archived span whose tags match.
 
 ```json
 {
@@ -2089,7 +2089,7 @@ Retrieve earlier conversation context that was condensed into a checkpoint, by t
   "properties": {
     "tags": {
       "type": "array",
-      "description": "One or more topic tags to match, e.g. from a checkpoint's tag list.",
+      "description": "One or more topic tags to match, e.g. from the memory catalog.",
       "items": {
         "type": "string"
       }

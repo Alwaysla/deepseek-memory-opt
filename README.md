@@ -18,6 +18,7 @@ My implementation adds categorization during folding, on-demand recall, and re-a
 > - **Tag-indexed memory**: Long-term memory system with on-demand retrieval of archived conversation spans
 >   - `memory-core`: Content-hash indexed archival events and memory projection
 >   - `memory-compaction`: Tag-aware compaction backend that archives and indexes spans
+>   - `memory-catalog`: Bounded recent tag-and-digest catalog in every relevant model request
 >   - `tool-recall`: `recall_memory(tags)` tool for deterministic span reconstruction
 >   - `memory-ttl-pruner`: Automatic fold-back of aged recalled content
 >

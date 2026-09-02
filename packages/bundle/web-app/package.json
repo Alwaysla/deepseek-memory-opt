@@ -99,6 +99,7 @@
     "@deepseek-ai/dsh-host-plugin-inventory": "workspace:^",
     "@deepseek-ai/dsh-host-webserver": "workspace:^",
     "@deepseek-ai/dsh-launch-environment": "workspace:^",
+    "@deepseek-ai/dsh-memory-catalog": "workspace:^",
     "@deepseek-ai/dsh-memory-compaction": "workspace:^",
     "@deepseek-ai/dsh-memory-core": "workspace:^",
     "@deepseek-ai/dsh-memory-ttl-pruner": "workspace:^",

@@ -92,6 +92,8 @@
       "@deepseek-ai/dsh-memory-core": ["./packages/memory/memory-core/src/index.ts"],
       "@deepseek-ai/dsh-memory-core/types": ["./packages/memory/memory-core/src/types.ts"],
       "@deepseek-ai/dsh-memory-core/invariant": ["./packages/memory/memory-core/src/invariant.ts"],
+      "@deepseek-ai/dsh-memory-catalog": ["./packages/memory/memory-catalog/src/index.ts"],
+      "@deepseek-ai/dsh-memory-catalog/invariant": ["./packages/memory/memory-catalog/src/invariant.ts"],
       "@deepseek-ai/dsh-memory-compaction": ["./packages/memory/memory-compaction/src/index.ts"],
       "@deepseek-ai/dsh-memory-compaction/invariant": ["./packages/memory/memory-compaction/src/invariant.ts"],
       "@deepseek-ai/dsh-tool-recall": ["./packages/memory/tool-recall/src/index.ts"],

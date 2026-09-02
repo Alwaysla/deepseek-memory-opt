@@ -35,11 +35,13 @@ const AUTO_CONFIG = { auto: true, thresholdRatio: 0.005, retainRatio: 0.001 } as
 
 /** A mock model: normal turns answer briefly; the summarization call returns the tagged checkpoint. */
 class MockModel extends LlmAdapter {
+  readonly compactionInputs: Message[][] = []
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({ provider, id: model, name: model, context: { contextWindow: 100_000 } })
   }
 
   override async * stream(options: { messages: readonly Message[]; purpose?: string }): AsyncIterable<StreamChunk> {
+    if (options.purpose === 'compaction') this.compactionInputs.push([...options.messages])
     const text = options.purpose === 'compaction' ? CHECKPOINT : 'ok'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'block-end', index: 0, block: { type: 'text', text } }
@@ -51,6 +53,7 @@ interface Harness {
   ctx: Context
   agent: Agent
   engine: MemoryCompactionEngine
+  model: MockModel
 }
 
 let sessionCounter = 0
@@ -62,10 +65,11 @@ async function harness(config: Record<string, unknown> = AUTO_CONFIG): Promise<H
   await ctx.plugin(TokenMeter)
   const root = await mkdtemp(join(tmpdir(), 'dsh-memory-'))
   await ctx.plugin(LocalSpillStore, { root })
-  ctx.llm.registerAdapter([MODEL], new MockModel())
+  const model = new MockModel()
+  ctx.llm.registerAdapter([MODEL], model)
   const engine = new MemoryCompactionEngine(ctx, config)
   const agent = ctx.agentLoop.create(SessionId(`memory-${sessionCounter++}`), { provider: MODEL, model: MODEL })
-  return { ctx, agent, engine }
+  return { ctx, agent, engine, model }
 }
 
 /** Run two turns carrying large history, then a third whose pre-step pressure-compacts the older span. */
@@ -106,6 +110,35 @@ describe('MemoryCompactionEngine archival', () => {
     // The organized copy exists on disk and holds the shadowed transcript.
     expect(record.locator).toBeDefined()
     expect(await readFile(record.locator!, 'utf8')).toContain('## user')
+  })
+
+  it('excludes the memory catalog from summary input, archive seqs, spill, and recall source', async () => {
+    const h = await harness({ auto: false })
+    const catalog = h.agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'CATALOG_SECRET' }],
+      source: {
+        kind: 'plugin', plugin: '@deepseek-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [
+          { name: 'memory:catalog', text: 'CATALOG_SECRET' },
+          { name: 'workspace:policy', text: `WORKSPACE_VISIBLE ${'policy '.repeat(100)}` },
+        ],
+      },
+    }), { surfaceOp: 'append' })
+    h.agent.session.append('user/message', userMessage(HISTORY), { surfaceOp: 'append' })
+    h.agent.session.append('user/message', userMessage(HISTORY), { surfaceOp: 'append' })
+
+    const result = await h.engine.compactNow(h.agent, SIGNAL)
+    expect(result).not.toBeNull()
+    const record = archivedRecords(h.agent.session)[0]!.data
+    const summarizerText = h.model.compactionInputs.flatMap(messages => messages)
+      .flatMap(message => message.content)
+      .map(block => block.type === 'text' ? block.text : '').join('\n')
+    expect(summarizerText).not.toContain('CATALOG_SECRET')
+    expect(summarizerText).toContain('WORKSPACE_VISIBLE')
+    expect(record.shadowedSeqs).not.toContain(catalog.seq)
+    const spill = await readFile(record.locator!, 'utf8')
+    expect(spill).not.toContain('CATALOG_SECRET')
+    expect(spill).toContain('WORKSPACE_VISIBLE')
   })
 
   it('is idempotent by content: re-archiving the same span reuses the entry id', async () => {

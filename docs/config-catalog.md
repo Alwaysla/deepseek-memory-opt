@@ -1439,6 +1439,26 @@ export interface ReconnectConfig {
 
 Source: [`packages/mcp/mcp-client/src/index.ts:98`](../packages/mcp/mcp-client/src/index.ts)
 
+<a id="deepseek-aidsh-memory-catalog"></a>
+
+## `@deepseek-ai/dsh-memory-catalog`
+
+Requires: `sessionProjections` · `systemPrompt`
+
+```ts config-catalog
+/** Deployment policy for the bounded memory catalog. */
+export interface Config {
+  /** Maximum recent archive entries shown. Defaults to 20. */
+  maxEntries?: number
+  /** Maximum estimated tokens for the complete publication. Defaults to 1200. */
+  maxTokens?: number
+  /** Maximum characters from each digest before ellipsis. Defaults to 160. */
+  digestMaxChars?: number
+}
+```
+
+Source: [`packages/memory/memory-catalog/src/index.ts:31`](../packages/memory/memory-catalog/src/index.ts)
+
 <a id="deepseek-aidsh-memory-ttl-pruner"></a>
 
 ## `@deepseek-ai/dsh-memory-ttl-pruner`
@@ -2429,7 +2449,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:186`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:203`](../packages/core/system-prompt/src/index.ts)
 
 <a id="deepseek-aidsh-terminal-bash"></a>
 

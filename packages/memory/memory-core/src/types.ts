@@ -18,9 +18,9 @@ export type EntryId = Branded<'EntryId'>
 
 /**
  * One archived span's index record. The span's raw events remain in the session
- * log at {@link MemoryEntry.shadowedSeqs}; recall reconstructs the span from
- * those seqs, so this record is a tag index over durable log data, not the sole
- * copy.
+ * log at {@link MemoryEntry.shadowedSeqs}; recall reconstructs archival content
+ * from those seqs while excluding memory-catalog publications, so this record is
+ * a tag index over durable log data, not the sole copy.
  */
 export interface MemoryEntry {
   /** Content-hash identity; re-archiving the same span yields the same id. */
@@ -29,7 +29,7 @@ export interface MemoryEntry {
   tags: string[]
   /** Short human-facing digest of the span, shown on the compaction card. */
   digest: string
-  /** Surface-node seqs of the shadowed span, in surface order; recall reconstructs from these. */
+  /** Complete surface-node seqs replaced by compaction, including excluded catalog publications. */
   shadowedSeqs: number[]
   /** Heuristic token count of the shadowed span under the token meter's estimator. */
   shadowedTokenCount: number

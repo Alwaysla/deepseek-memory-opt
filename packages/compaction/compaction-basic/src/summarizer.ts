@@ -82,6 +82,8 @@ export interface SummarizationInput {
   readonly tools?: readonly ToolSchema[]
   /** The shadowed region, in surface order, that precedes the compaction instruction. */
   readonly messages: readonly Message[]
+  /** Surface seq aligned one-for-one with each derived message. */
+  readonly messageSeqs?: readonly number[]
 }
 
 /** Safe summary content plus the exact auxiliary call envelope recorded with it. */

@@ -15,7 +15,7 @@ import type { ContentBlock, Message } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 // Type-only: resolves ctx.sessionProjections and the memoryIndex projection key.
 import type {} from '@deepseek-ai/dsh-session-projection'
-import { RECALL_TOOL_NAME } from '@deepseek-ai/dsh-memory-core'
+import { projectMemoryArchive, RECALL_TOOL_NAME } from '@deepseek-ai/dsh-memory-core'
 import type { MemoryEntry } from '@deepseek-ai/dsh-memory-core/types'
 
 export const name = 'tool-recall'
@@ -31,15 +31,16 @@ function textOf(blocks: readonly ContentBlock[]): string {
 /** Reconstruct one archived span as a readable transcript from its shadowed log seqs. */
 function reconstruct(session: Session, shadowedSeqs: readonly number[]): string {
   const events = session.events
-  const parts: string[] = []
+  const messages: Message[] = []
   for (const seq of shadowedSeqs) {
     const event = events[seq]
     if (event === undefined) continue
     const message: Message | null = session.deriveEventMessage(event)
-    if (message === null) continue
-    parts.push(`## ${message.role}\n${textOf(message.content)}`)
+    if (message !== null) messages.push(message)
   }
-  return parts.join('\n\n')
+  return projectMemoryArchive(messages)
+    .map(message => `## ${message.role}\n${textOf(message.content)}`)
+    .join('\n\n')
 }
 
 /** Entries whose tags intersect the requested tags, in stable id order. */
@@ -59,14 +60,14 @@ export function apply(ctx: Context): void {
     name: RECALL_TOOL_NAME,
     description:
       'Retrieve earlier conversation context that was condensed into a checkpoint, by topic tag. '
-      + 'A checkpoint lists the tags it archived; pass one or more of those tags to pull the full '
-      + 'original span back so you can continue work that depended on it. Returns every archived '
+      + 'The memory catalog lists recent tags and digests; pass one or more of those tags to pull '
+      + 'the original span back so you can continue work that depended on it. Returns every archived '
       + 'span whose tags match.',
     parameters: {
       tags: {
         type: 'array',
         required: true,
-        description: 'One or more topic tags to match, e.g. from a checkpoint\'s tag list.',
+        description: 'One or more topic tags to match, e.g. from the memory catalog.',
         items: { type: 'string' },
       },
     },

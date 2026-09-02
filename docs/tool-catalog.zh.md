@@ -2088,7 +2088,7 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
 
 ### `recall_memory`
 
-按主题标签检索先前被压缩进检查点的对话上下文。检查点会列出它归档时用的标签；传入其中一个或多个标签,即可把完整的原始历史段拉回,以继续依赖它的工作。返回标签匹配的每一段归档。
+按主题标签检索先前被压缩进检查点的对话上下文。记忆目录会列出近期标签和摘要；传入其中一个或多个标签，即可把原始历史段拉回，以继续依赖它的工作。返回标签匹配的每一段归档。
 
 ```json
 {
@@ -2096,7 +2096,7 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
   "properties": {
     "tags": {
       "type": "array",
-      "description": "One or more topic tags to match, e.g. from a checkpoint's tag list.",
+      "description": "One or more topic tags to match, e.g. from the memory catalog.",
       "items": {
         "type": "string"
       }

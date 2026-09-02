@@ -8,7 +8,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { AnonymousEntries, NamedEntries, ScopedLayers, scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer, Scoped } from '@deepseek-ai/dsh-scope'
-import type { ContextSnapshotSection, ToolSchema } from '@deepseek-ai/dsh-llm'
+import type { ContextSnapshotSection, Message, ToolSchema, UserMessage } from '@deepseek-ai/dsh-llm'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -129,6 +129,23 @@ export const PERSONA_SECTION = 'deployment:persona'
 
 /** Prompt order of the persona slot; the first section a model reads. */
 export const PERSONA_ORDER = 0
+
+/** Source plugin recorded on durable aggregate runtime-context snapshots. */
+export const RUNTIME_CONTEXT_SOURCE = '@deepseek-ai/dsh-system-prompt'
+
+/**
+ * Test whether a message is an aggregate runtime-context snapshot.
+ * @param message - message derived from the durable session surface.
+ * @returns whether the message carries the system-prompt snapshot source.
+ */
+export function isRuntimeContextMessage(
+  message: Message,
+): message is UserMessage & { source: Extract<UserMessage['source'], { kind: 'plugin'; form: 'snapshot' }> } {
+  return message.role === 'user'
+    && message.source.kind === 'plugin'
+    && message.source.plugin === RUNTIME_CONTEXT_SOURCE
+    && message.source.form === 'snapshot'
+}
 
 /** Valid variable names: how they are written between the braces. */
 const VARIABLE_NAME = /^[a-z][a-z0-9_]*$/

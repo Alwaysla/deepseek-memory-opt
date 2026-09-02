@@ -4,13 +4,14 @@ English | [中文](README.zh.md)
 
 The archival compaction backend for the [tag-indexed memory family](../README.md): a `MemoryCompactionEngine` that subclasses [`BasicCompactionEngine`](../../compaction/compaction-basic/README.md) and, on every compaction, (1) asks the model for retrieval tags, (2) writes an organized transcript copy of the shadowed span through `ctx.spillStore`, and (3) appends a `memory/archived` index record once the transaction commits. It registers `ctx.compaction`, replacing `compaction-basic` as the backend.
 
-It reuses `compaction-basic`'s replay-and-price machinery unchanged — token pressure, retention, the summarization call, and the durable transaction — and customizes only two seams: the summarization directive and post-commit indexing.
+It reuses `compaction-basic`'s pressure, retention, and durable transaction machinery. Before the summarization call it projects the selected messages to remove the `memory:catalog` runtime-context section; unrelated sections in the same aggregate snapshot remain.
 
 ## What it owns
 
 - **Tagging** — `summaryInstruction()` appends a directive asking the model to end its checkpoint with a `TAGS:` line. The engine parses that line into 3–7 lowercase tags, keeps a clean digest card (the `TAGS:` line never reaches the model), and falls back to a single `general` tag when the model emits none.
-- **Organized copy** — the shadowed span is written verbatim as a role-labelled transcript through `ctx.spillStore.saveText` (a required injection), under a tag-derived filename. The locator is recorded on the index entry.
-- **Indexing** — a `memory/archived` record (owned by [`memory-core`](../memory-core/README.md)) is appended after `compactRegion`/`compactNow` commit, carrying the tags, digest, shadowed seqs, and locator. Because indexing runs post-commit, a record never refers to an un-shadowed span.
+- **Organized copy** — the archive-visible span is written as a role-labelled transcript through `ctx.spillStore.saveText` (a required injection), under a tag-derived filename. The locator is recorded on the index entry.
+- **Indexing** — a `memory/archived` record (owned by [`memory-core`](../memory-core/README.md)) is appended after `compactRegion`/`compactNow` commit, carrying the tags, digest, archive-visible seqs, and locator. Because indexing runs post-commit, a record never refers to an un-shadowed span. The generic compaction result still retains the complete positional replacement provenance.
+- **Catalog exclusion** — the `memory:catalog` section is removed before summarization, hashing, spill output, and archive indexing. An aggregate runtime-context snapshot that also carries unrelated sections is re-rendered with those sections preserved, while its seq is omitted from the archive because the durable node contained catalog material.
 - **Idempotence** — the entry id is `entryIdFor(shadowedMessages)`, a content hash. Re-archiving the same span (e.g. after it was recalled and folded back) reuses the id, so the catalog and organized copy never duplicate.
 
 Both the automatic pressure/overflow paths and the manual `/compact` path archive.
@@ -39,7 +40,7 @@ Replacing rather than append-only. Each checkpoint invalidates reuse from the fi
 
 #### What the model sees
 
-The summarization model receives the conversation replayed verbatim — the same system prompt, tool schemas, and messages the last routed request sent for the shadowed region — followed by the base compaction instruction with one appended directive: end the checkpoint with a single `TAGS:` line of 3–7 lowercase retrieval tags. The conversation model never sees this private request; only the returned text (minus the parsed `TAGS:` line) is stored.
+The summarization model receives the selected conversation with the `memory:catalog` section removed, followed by the base compaction instruction with one appended directive: end the checkpoint with a single `TAGS:` line of 3–7 lowercase retrieval tags. Other sections in the aggregate runtime-context snapshot remain. The conversation model never sees this private request; only the returned text (minus the parsed `TAGS:` line) is stored.
 
 #### Token effect
 

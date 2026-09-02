@@ -445,6 +445,42 @@ describe('agent loop', () => {
       && message.source.plugin === '@deepseek-ai/dsh-system-prompt')).toBe(true)
   })
 
+  it('re-emits runtime context in the same request when pre-step compaction removes it', async () => {
+    const adapter = new MockAdapter([textResponse('one'), textResponse('two')])
+    const ctx = await harness(adapter)
+    ctx.systemPrompt.context({ name: 'policy', order: 0, text: 'Mode: read-only.' })
+    const agent = ctx.agentLoop.create(SessionId('a-runtime-context-same-step'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'first')
+    await waitForIdle(ctx, agent)
+    let compactOnNextStep = true
+    ctx.on('agent/pre-step', ({ agent: subject }, next) => next().then(decision => {
+      if (!compactOnNextStep || decision.kind === 'reject') return decision
+      compactOnNextStep = false
+      const contextSeq = subject.session.surface.nodes.find(seq => {
+        const event = subject.session.events[seq]
+        return event?.type === 'user/message'
+          && event.data.source.kind === 'plugin'
+          && event.data.source.plugin === '@deepseek-ai/dsh-system-prompt'
+      })
+      if (contextSeq === undefined) throw new Error('missing runtime context to compact')
+      subject.session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'compacted summary' }],
+        source: { kind: 'plugin', plugin: 'test-compaction' },
+      }), {
+        surfaceOp: { op: 'replace', start: contextSeq, end: contextSeq },
+        sourceEventSeqs: [contextSeq],
+      })
+      return decision
+    }))
+
+    send(agent, 'after compaction')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests[1]?.messages.some(message =>
+      message.source.kind === 'plugin'
+      && message.source.plugin === '@deepseek-ai/dsh-system-prompt')).toBe(true)
+  })
+
   it('clears compacted runtime context after the active set becomes empty', async () => {
     const adapter = new MockAdapter([textResponse('one'), textResponse('two')])
     const ctx = await harness(adapter)

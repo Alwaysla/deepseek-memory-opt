@@ -13,14 +13,15 @@
 import { BasicCompactionEngine } from '@deepseek-ai/dsh-compaction-basic'
 import type { SummarizationInput, SummaryResult } from '@deepseek-ai/dsh-compaction-basic'
 import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
-import { entryIdFor } from '@deepseek-ai/dsh-memory-core'
+import { containsMemoryCatalog, entryIdFor, projectMemoryArchive } from '@deepseek-ai/dsh-memory-core'
 import type { EntryId } from '@deepseek-ai/dsh-memory-core/types'
 import type { ContentBlock, Message } from '@deepseek-ai/dsh-llm'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
-// Type-only: makes the injected ctx.spillStore service resolvable.
+// Type-only: makes injected services resolvable on Context.
 import type {} from '@deepseek-ai/dsh-spill'
+import type {} from '@deepseek-ai/dsh-token-meter'
 
 /**
  * Appended to the base compaction directive so the model emits retrieval tags.
@@ -84,7 +85,13 @@ export class MemoryCompactionEngine extends BasicCompactionEngine {
    * transaction commits. Single-slot: the compaction seam serializes every
    * transaction under one lock, so at most one archive is ever pending.
    */
-  private pendingArchive: { entryId: EntryId; tags: string[]; digest: string; locator: string } | undefined
+  private pendingArchive: {
+    entryId: EntryId
+    tags: string[]
+    digest: string
+    locator: string
+    archivedSeqs: number[]
+  } | undefined
 
   protected override summaryInstruction(): string {
     return `${super.summaryInstruction()}\n${TAG_ADDENDUM}`
@@ -95,11 +102,22 @@ export class MemoryCompactionEngine extends BasicCompactionEngine {
     agent: Agent,
     signal?: AbortSignal,
   ): Promise<SummaryResult> {
-    const entryId = entryIdFor(input.messages)
-    const result = await super.summarize(input, agent, signal)
+    const archivedMessageIndexes = input.messages
+      .map((message, index) => containsMemoryCatalog(message) ? -1 : index)
+      .filter(index => index >= 0)
+    const archiveMessages = projectMemoryArchive(input.messages)
+    const result = await super.summarize({
+      ...input,
+      messages: archiveMessages,
+      ...input.messageSeqs === undefined ? {} : {
+        messageSeqs: input.messageSeqs.filter((_seq, index) => archivedMessageIndexes.includes(index)),
+      },
+    }, agent, signal)
+    const entryId = entryIdFor(archiveMessages)
     const { digestText, tags } = splitDigestAndTags(result.summary)
-    const locator = await this.archive(agent, entryId, tags, input.messages)
-    this.pendingArchive = { entryId, tags, digest: digestText, locator }
+    const locator = await this.archive(agent, entryId, tags, archiveMessages)
+    const archivedSeqs = input.messageSeqs?.filter((_seq, index) => archivedMessageIndexes.includes(index)) ?? []
+    this.pendingArchive = { entryId, tags, digest: digestText, locator, archivedSeqs }
     return { ...result, summary: [{ type: 'text', text: digestText }] }
   }
 
@@ -138,12 +156,20 @@ export class MemoryCompactionEngine extends BasicCompactionEngine {
     // oxlint-disable-next-line typescript/no-non-null-assertion
     const pending = this.pendingArchive!
     this.pendingArchive = undefined
+    const shadowedSeqs = pending.archivedSeqs
+    if (shadowedSeqs.length === 0) return
+    const shadowedTokenCount = shadowedSeqs.reduce((total, seq) => {
+      const event = session.events[seq]
+      if (event === undefined) return total
+      const message = session.deriveEventMessage(event)
+      return total + (message === null ? 0 : this.ctx.tokenMeter.estimateMessage(message))
+    }, 0)
     session.append('memory/archived', {
       entryId: pending.entryId,
       tags: pending.tags,
       digest: pending.digest,
-      shadowedSeqs: result.shadowedSeqs,
-      shadowedTokenCount: result.shadowedTokenCount,
+      shadowedSeqs,
+      shadowedTokenCount,
       summarySeq: result.summarySeq,
       locator: pending.locator,
     })

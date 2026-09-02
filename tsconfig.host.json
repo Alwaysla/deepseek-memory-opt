@@ -238,6 +238,7 @@
     { "path": "./packages/compaction/command-compact" },
     { "path": "./packages/compaction/compaction-tool-result-pruner" },
     { "path": "./packages/memory/memory-core" },
+    { "path": "./packages/memory/memory-catalog" },
     { "path": "./packages/memory/memory-compaction" },
     { "path": "./packages/memory/tool-recall" },
     { "path": "./packages/memory/memory-ttl-pruner" },

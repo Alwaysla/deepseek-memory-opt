@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-26-tag-indexed-memory.md
-2026-08-26-tag-indexed-memory.md: 672c3061b2019784bf87be330f1918925d3b72d2
-2026-08-26-tag-indexed-memory.zh.md: 3b1353efc8cecf5ac88018e0a55ea2a7c96fd268
+2026-08-26-tag-indexed-memory.md: 46675cb986c31d661f798dfd4338d9cc981fa438
+2026-08-26-tag-indexed-memory.zh.md: cc28f4c74ac89f31aecb68ce1cf093474300ea70

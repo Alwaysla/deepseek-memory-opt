@@ -5,15 +5,15 @@
 
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextSnapshotSection } from '@deepseek-ai/dsh-llm'
+import { RUNTIME_CONTEXT_SOURCE } from '@deepseek-ai/dsh-system-prompt'
 import type { Session, UserMessage } from '@deepseek-ai/dsh-session'
 import { isReplacementSurfaceEvent } from '@deepseek-ai/dsh-session'
 import type { Context } from '@deepseek-ai/cordis'
 
-const SOURCE = '@deepseek-ai/dsh-system-prompt'
 const CLEARED = 'Current runtime context: none. Earlier runtime-context snapshots no longer apply.'
 
 function isOwned(message: UserMessage): boolean {
-  return message.source.kind === 'plugin' && message.source.plugin === SOURCE
+  return message.source.kind === 'plugin' && message.source.plugin === RUNTIME_CONTEXT_SOURCE
 }
 
 function textOf(message: UserMessage): string | undefined {
@@ -69,8 +69,8 @@ export class RuntimeContextProjection {
       content: [{ type: 'text', text: snapshot }],
       // The cleared marker has no contributions left to attribute.
       source: sections.length === 0
-        ? { kind: 'plugin', plugin: SOURCE }
-        : { kind: 'plugin', plugin: SOURCE, form: 'snapshot', sections },
+        ? { kind: 'plugin', plugin: RUNTIME_CONTEXT_SOURCE }
+        : { kind: 'plugin', plugin: RUNTIME_CONTEXT_SOURCE, form: 'snapshot', sections },
     })
   }
 }

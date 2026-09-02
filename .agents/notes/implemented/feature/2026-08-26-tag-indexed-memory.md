@@ -48,7 +48,7 @@ To make `summarize()` genuinely overridable by a subclass that needs a different
 - **A dedicated `memory/archived` event emitted inside `summarize()`.** Rejected: `summarize()` lacks the shadowed seqs, and appending mid-transaction risks an orphan record if the transaction later fails. Post-commit indexing from the `compactRegion`/`compactNow` overrides is orphan-free and has the seqs.
 - **Recall reads the spill file.** Rejected as the source of truth: it makes recall depend on external mutable filesystem state and weakens replay. The log already holds the shadowed events at recorded seqs, so recall reconstructs from there; the spill file is kept only as the organized on-disk artifact the user asked for.
 - **Encoding tags/locator into the `compaction/summary` event.** Not possible — that event's shape is fixed in the seam package — and parsing them out of the model-facing card is fragile. A dedicated `memory/archived` record in `memory-core` is the clean home.
-- **A system-prompt tag catalog section.** Deferred: it needs agent-scoped assembly with session access, and the per-card `TAGS`/recall hint already tells the model what is recallable. A later revision can add an aggregated catalog.
+- **A system-prompt tag catalog section.** Added by the later [bounded memory catalog](2026-09-02-bounded-memory-catalog.md), which supplies agent-scoped session access and prevents the catalog from entering archived content.
 
 ## Consequences
 
