@@ -233,6 +233,23 @@ type PreStepDecision =
   | { kind: 'enter'; messages: UserMessage[] }
 ```
 
+`agent/pre-dispatch` 在最终请求组装之后、`llm.stream` 之前运行。它接收规范 header 与完整模型可见消息。改变持久请求输入的 listener 返回 `{ kind: 'retry' }`，使循环重建请求，而不是分派该快照。
+
+```ts type-equiv
+/** Final canonical request inputs exposed before model dispatch. */
+interface PreDispatchRequest {
+  /** Canonical request header after route middleware and adapter defaults resolve. */
+  readonly header: EpochHeader
+  /** Complete model-visible messages at this dispatch boundary. */
+  readonly messages: readonly Message[]
+}
+```
+
+```ts type-equiv
+/** Action returned before dispatch when durable request inputs changed and must be rebuilt. */
+type PreDispatchAction = { kind: 'retry' } | undefined
+```
+
 `agent/request-error` 在失败的模型步骤关闭之后、其轮次关闭之前运行。listener 可以在失败轮次的 signal 仍然存活时修复持久状态或 await 策略工作。处理该错误的 listener 返回 `{ kind: 'retry' }` 且不调用 `next()`；默认的 `undefined` 会让失败保持终态。
 
 ```ts type-equiv
@@ -240,7 +257,7 @@ type PreStepDecision =
 type RequestErrorAction = { kind: 'retry' } | undefined
 ```
 
-`agent/pre-step` 是请求推导前唯一的串行监听器链。`agent/turn-stopping` 在轮次没有工具或 steering（中途引导）后续时运行，先于最后一次 steering 排空。
+`agent/pre-step` 是请求推导前的串行准入链；`agent/pre-dispatch` 是最终请求的串行监听器链。`agent/turn-stopping` 在轮次没有工具或 steering（中途引导）后续时运行，先于最后一次 steering 排空。
 
 `agent/session-start` 携带 `SessionStartSource`（会话生命周期为何开始；桥接层据此匹配其 SessionStart）：
 
@@ -248,6 +265,12 @@ type RequestErrorAction = { kind: 'retry' } | undefined
 /** Why a session lifecycle began; seeded creates are `startup`, while persisted loads are `resume`. */
 type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact'
 ```
+
+## 会话持续指令
+
+`SessionDirective` 是按稳定 key 标识的指令，会投影到所属会话的每次请求中。`SetDirectiveRequest` 携带 `ctx.sessionDirectives.set()` 接受的 key、模型可见值与生产者归属。
+
+源码：[`packages/context/session-directives/src/types.ts`](../../packages/context/session-directives/src/types.ts) 与 [`packages/context/session-directives/src/index.ts`](../../packages/context/session-directives/src/index.ts)
 
 ## 会话
 
@@ -732,6 +755,50 @@ roots(): Agent[]
 
 Source: [`packages/core/agent/src/index.ts`](../../packages/core/agent/src/index.ts)
 
+<a id="ctxsessiondirectives--sessiondirectivesservice"></a>
+
+### `ctx.sessionDirectives` — `SessionDirectivesService`
+
+Durable session-directive service (`ctx.sessionDirectives`).
+
+```ts cordis-catalog
+/**
+ * List active directives in stable order.
+ * @param session - owning session.
+ * @returns a detached list reconstructed from its durable log.
+ */
+list(session: Session): SessionDirective[]
+
+/**
+ * Add or replace one directive by stable key and append the complete resulting state.
+ * Existing keys retain their position. Rejected writes append nothing.
+ * @param session - owning session.
+ * @param request - directive value and required source/scope attribution.
+ * @returns a detached accepted directive.
+ * @throws {@link SessionDirectivesError} when input or complete rendered state exceeds a configured limit.
+ */
+set(session: Session, request: SetDirectiveRequest): SessionDirective
+
+/**
+ * Remove one stable key and append the complete resulting state.
+ * @param session - owning session.
+ * @param key - exact normalized key to remove.
+ * @returns whether the key existed; an absent key appends no event.
+ */
+remove(session: Session, key: string): boolean
+
+/**
+ * Clear all active directives with one complete-state event.
+ * @param session - owning session.
+ * @returns whether any directive existed; an empty state appends no event.
+ */
+clear(session: Session): boolean
+```
+
+Types: [Session](session.zh.md)
+
+Source: [`packages/context/session-directives/src/index.ts`](../../packages/context/session-directives/src/index.ts)
+
 <a id="agent-events"></a>
 
 ### `agent/*` events
@@ -869,6 +936,34 @@ One message entered the live inbox.
 ```
 
 Types: [Scoped](scope.zh.md) · [UserMessage](session.zh.md)
+
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
+
+<a id="agentpre-dispatch--waterfall"></a>
+
+#### `agent/pre-dispatch` — waterfall
+
+Inspect or prepare durable state for the exact request immediately before dispatch. The canonical header and complete boundary messages are fixed for this attempt. Return `{ kind: 'retry' }` after changing durable request inputs so the loop rebuilds instead of dispatching the stale snapshot.
+
+```ts cordis-catalog
+/**
+ * Inspect or prepare durable state for the exact request immediately before
+ * dispatch. The canonical header and complete boundary messages are fixed
+ * for this attempt. Return `{ kind: 'retry' }` after changing durable request
+ * inputs so the loop rebuilds instead of dispatching the stale snapshot.
+ * @param payload.agent - the agent making the model call.
+ * @param payload.turn - the open turn number.
+ * @param payload.step - the step containing this request attempt.
+ * @param payload.request - final canonical header and boundary messages.
+ * @param payload.signal - the turn cancellation signal.
+ * @param next - delegates to the next listener; its result is the downstream decision.
+ * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+ * @mode waterfall
+ */
+'agent/pre-dispatch'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; request: PreDispatchRequest; signal: AbortSignal }, next: () => Promise<PreDispatchAction>): Promise<PreDispatchAction>
+```
+
+Types: [Scoped](scope.zh.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 

@@ -12,6 +12,7 @@ import type {
   AgentStatus,
   CancelOptions,
   InboxTarget,
+  PreDispatchAction,
   PreStepDecision,
   RequestErrorAction,
 } from '@deepseek-ai/dsh-agent'
@@ -354,6 +355,31 @@ export class ReactLoopAgent implements Agent {
       const { request, preparedCall } = await this.buildRequest(
         turn, step, assembly.tools, system, this.session.deriveMessages(), signal,
       )
+      const preDispatch = await this.dispatch.waterfall(
+        'agent/pre-dispatch', {
+          turn,
+          step,
+          request: {
+            header: canonicalHeader({
+              config: {
+                provider: request.provider,
+                model: request.model,
+                ...request.reasoningEffort === undefined ? {} : { reasoningEffort: request.reasoningEffort },
+                ...request.temperature === undefined ? {} : { temperature: request.temperature },
+                ...request.maxTokens === undefined ? {} : { maxTokens: request.maxTokens },
+                ...request.stop === undefined ? {} : { stop: request.stop },
+              },
+              ...request.system === undefined ? {} : { system: request.system },
+              ...request.tools === undefined ? {} : { tools: request.tools },
+            }),
+            messages: request.messages,
+          },
+          signal,
+        },
+        (): Promise<PreDispatchAction> => Promise.resolve(undefined),
+      )
+      signal.throwIfAborted()
+      if (preDispatch?.kind === 'retry') continue
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
       try {

@@ -138,6 +138,16 @@
     },
     {
       "doc": "docs/subsystems/core.md",
+      "symbol": "PreDispatchRequest",
+      "source": "packages/core/agent/src/runtime-types.ts"
+    },
+    {
+      "doc": "docs/subsystems/core.md",
+      "symbol": "PreDispatchAction",
+      "source": "packages/core/agent/src/runtime-types.ts"
+    },
+    {
+      "doc": "docs/subsystems/core.md",
       "symbol": "RequestErrorAction",
       "source": "packages/core/agent/src/runtime-types.ts"
     },

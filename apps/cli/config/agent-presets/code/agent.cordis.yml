@@ -104,6 +104,11 @@
 - id: tool-goal
   name: '@deepseek-ai/dsh-tool-goal'
 
+# Directive state, command, and recognition live on the Host. This row adds only
+# the model-facing controls selected by this preset.
+- id: session-directive-tools
+  name: '@deepseek-ai/dsh-session-directive-consumers/tools'
+
 # ── plan mode ───────────────────────────────────────────────────────────────
 
 # Plan state is per-agent by nature, so an entry-local realm is not a

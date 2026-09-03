@@ -395,6 +395,23 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/compaction/compaction/src/types.ts:33`](../packages/compaction/compaction/src/types.ts)
 
+### `directive/*`
+
+<a id="directivechange--log-only"></a>
+
+#### `directive/change` — log-only
+
+```ts persistence-catalog
+/**
+ * Complete active directive state after one set, remove, or clear operation.
+ * The event is log-only and last-wins; each entry retains source and scope attribution.
+ * @param data - complete post-change directive state.
+ */
+'directive/change': DirectiveChange
+```
+
+来源：[`packages/context/session-directives/src/types.ts:34`](../packages/context/session-directives/src/types.ts)
+
 ### `feedback/*`
 
 <a id="feedbackrecord--log-only"></a>

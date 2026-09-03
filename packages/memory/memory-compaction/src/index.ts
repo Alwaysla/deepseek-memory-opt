@@ -13,7 +13,7 @@
 import { BasicCompactionEngine } from '@deepseek-ai/dsh-compaction-basic'
 import type { SummarizationInput, SummaryResult } from '@deepseek-ai/dsh-compaction-basic'
 import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
-import { containsMemoryCatalog, entryIdFor, projectMemoryArchive } from '@deepseek-ai/dsh-memory-core'
+import { entryIdFor, projectMemoryArchiveMessage } from '@deepseek-ai/dsh-memory-core'
 import type { EntryId } from '@deepseek-ai/dsh-memory-core/types'
 import type { ContentBlock, Message } from '@deepseek-ai/dsh-llm'
 import { CallId } from '@deepseek-ai/dsh-llm'
@@ -102,10 +102,12 @@ export class MemoryCompactionEngine extends BasicCompactionEngine {
     agent: Agent,
     signal?: AbortSignal,
   ): Promise<SummaryResult> {
-    const archivedMessageIndexes = input.messages
-      .map((message, index) => containsMemoryCatalog(message) ? -1 : index)
-      .filter(index => index >= 0)
-    const archiveMessages = projectMemoryArchive(input.messages)
+    const projected = input.messages.map((message, index) => ({
+      index,
+      message: projectMemoryArchiveMessage(message),
+    })).filter((entry): entry is { index: number; message: Message } => entry.message !== undefined)
+    const archivedMessageIndexes = projected.map(entry => entry.index)
+    const archiveMessages = projected.map(entry => entry.message)
     const result = await super.summarize({
       ...input,
       messages: archiveMessages,

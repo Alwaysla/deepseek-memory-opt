@@ -2,11 +2,12 @@
 
 English | [中文](README.zh.md)
 
-Product plugins that add model-visible request context without defining a tool. `agent-instructions` is included by the default `dsh-agent-spine-demo` bundle and can be disabled through bundle config; `time-context`, `tmux-context`, `session-reference`, `file-reference`, and `file-reference-local` are opt-in.
+Product plugins that add model-visible request context without defining a tool. `agent-instructions` is included by the default `dsh-agent-spine-demo` bundle and can be disabled through bundle config; `time-context`, `tmux-context`, `session-reference`, `session-directives`, `file-reference`, and `file-reference-local` are opt-in.
 
 | Package | Role | ctx key |
 |---|---|---|
 | [`session-reference/`](session-reference/README.md) | Bounded snapshots of other sessions | `ctx.sessionReferenceResolver` |
+| [`session-directives/`](session-directives/README.md) | Durable bounded same-session directives | `ctx.sessionDirectives` |
 | [`file-reference/`](file-reference/README.md) | File-reference discovery seam and `@file` grammar | `ctx.fileReferences` |
 | [`file-reference-local/`](file-reference-local/README.md) | Local-filesystem file-reference provider | — |
 | [`time-context/`](time-context/README.md) | Current-time and elapsed-time context | — |

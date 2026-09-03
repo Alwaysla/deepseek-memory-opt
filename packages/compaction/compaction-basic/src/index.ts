@@ -8,11 +8,12 @@ import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { CompactionEngine, ManualCompactionError } from '@deepseek-ai/dsh-compaction'
 import type { CompactionResult, CompactionTrigger } from '@deepseek-ai/dsh-compaction'
-import type { TokenMeter } from '@deepseek-ai/dsh-token-meter'
-import type { Session } from '@deepseek-ai/dsh-session'
+import type { TokenMeasurement, TokenMeter } from '@deepseek-ai/dsh-token-meter'
+import type { EpochHeader, Session } from '@deepseek-ai/dsh-session'
 import { CONTEXT_WINDOW_EXCEEDED_CODE, assertNever } from '@deepseek-ai/dsh-llm'
-import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
-import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
+import type { LlmCallConfig, Message } from '@deepseek-ai/dsh-llm'
+import type { Agent, PreDispatchAction } from '@deepseek-ai/dsh-agent'
+import { isRuntimeContextMessage } from '@deepseek-ai/dsh-system-prompt'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
 // Type-only: makes the optional sibling service available to `ctx.get()`.
 import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner'
@@ -77,6 +78,7 @@ function conversationTarget(
 const thresholdRatioSchema = z.number()
 const retainRatioSchema = z.number()
 const retainTokensSchema = z.number().step(1).min(0)
+const safetyReserveTokensSchema = z.number().step(1).min(0)
 const summarizationProviderSchema = z.string()
 const summarizationModelSchema = z.string()
 const maxTokensSchema = z.number().step(1).min(1)
@@ -89,6 +91,7 @@ const modelPolicy: z<ModelCompactPolicyConfig> = z.object({
   thresholdRatio: thresholdRatioSchema,
   retainRatio: retainRatioSchema,
   retainTokens: retainTokensSchema,
+  safetyReserveTokens: safetyReserveTokensSchema,
   summarizationProvider: summarizationProviderSchema,
   summarizationModel: summarizationModelSchema,
   maxTokens: maxTokensSchema,
@@ -111,6 +114,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     thresholdRatio: thresholdRatioSchema,
     retainRatio: retainRatioSchema,
     retainTokens: retainTokensSchema,
+    safetyReserveTokens: safetyReserveTokensSchema,
     summarizationProvider: summarizationProviderSchema,
     summarizationModel: summarizationModelSchema,
     maxTokens: maxTokensSchema,
@@ -148,24 +152,31 @@ export class BasicCompactionEngine extends CompactionEngine {
       )
     }
 
-    ctx.on('agent/pre-step', async (
-      { agent, signal },
+    ctx.on('agent/pre-dispatch', async (
+      { agent, request, signal },
       next,
-    ): Promise<PreStepDecision> => {
-      if (!signal.aborted) {
-        try {
-          const result = await this.compactIfNeeded(agent, 'pressure', signal)
-          if (result !== null) logResult(result, 'step pressure')
-        } catch (error: unknown) {
-          if (error instanceof TargetPressureConfigError) {
-            if (this.warnedPressureConfigTargets.has(error.targetKey)) return next()
-            this.warnedPressureConfigTargets.add(error.targetKey)
-          }
-          const message = error instanceof Error ? error.message : String(error)
-          ctx.logger.warn(`step compaction failed: ${message}; continuing the turn`)
+    ): Promise<PreDispatchAction> => {
+      if (signal.aborted) return next()
+      try {
+        const measurement = this.pressureMeasurement(agent.session, request.header, request.messages)
+        const result = await this.compactIfNeeded(
+          agent,
+          'pressure',
+          signal,
+          { measurement, header: request.header },
+        )
+        if (result === null) return next()
+        logResult(result, 'step pressure')
+        return { kind: 'retry' }
+      } catch (error: unknown) {
+        if (error instanceof TargetPressureConfigError) {
+          if (this.warnedPressureConfigTargets.has(error.targetKey)) return next()
+          this.warnedPressureConfigTargets.add(error.targetKey)
         }
+        const message = error instanceof Error ? error.message : String(error)
+        ctx.logger.warn(`step compaction failed: ${message}; continuing the turn`)
+        return next()
       }
-      return next()
     })
 
     ctx.on('agent/status', ({ agent, status }) => {
@@ -201,7 +212,6 @@ export class BasicCompactionEngine extends CompactionEngine {
         // A model-free prune can land before later summary work fails. That
         // durable reduction is sufficient retry proof; do not discard it just
         // because the optional second phase threw. Cancellation still wins.
-        // oxlint-disable-next-line typescript/no-unnecessary-condition -- the signal can abort while recovery is awaited.
         if (!signal.aborted && agent.session.surface.replaceGeneration > generation) {
           ctx.logger.warn(
             `context-overflow compaction failed after durable surface progress: ${message}; `
@@ -211,14 +221,12 @@ export class BasicCompactionEngine extends CompactionEngine {
           return { kind: 'retry' }
         }
         ctx.logger.warn(
-          // oxlint-disable-next-line typescript/no-unnecessary-condition -- the signal can abort while recovery is awaited.
           `context-overflow compaction failed: ${message}; ${signal.aborted
             ? 'cancellation prevents retry'
             : 'preserving the original request error'}`,
         )
         return next()
       }
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- the signal can abort while compaction is awaited.
       if (signal.aborted
         || agent.session.surface.replaceGeneration <= generation) return next()
       if (result !== null) logResult(result, 'context overflow recovery')
@@ -267,18 +275,22 @@ export class BasicCompactionEngine extends CompactionEngine {
    * @param agent - agent whose latest durable routed request is measured.
    * @param trigger - normal step-boundary pressure or context-overflow recovery.
    * @param signal - live turn cancellation signal forwarded to summarization.
+   * @param pressure - optional final dispatch measurement and canonical header.
    * @returns the latest summary compaction result, or `null` when no summary ran.
    */
   override async compactIfNeeded(
     agent: Agent,
     trigger: CompactionTrigger,
     signal: AbortSignal,
+    pressure?: { measurement: TokenMeasurement; header: EpochHeader },
   ): Promise<CompactionResult | null> {
-    const target = routedTarget(agent.session)
-    if (target === undefined) return null
+    const target = pressure === undefined
+      ? routedTarget(agent.session)
+      : pressure.header.config
+    if (target === undefined || target.provider.length === 0 || target.model.length === 0) return null
     const policy = resolveTargetPolicy(this.config, target)
     const meter = this.ctx.tokenMeter
-    let measurement = meter.measure(agent.session)
+    let measurement = pressure?.measurement ?? meter.measure(agent.session)
     switch (trigger) {
       case 'context-overflow':
         break
@@ -314,8 +326,16 @@ export class BasicCompactionEngine extends CompactionEngine {
         + 'configure contextWindow on that adapter model',
       )
     }
-    const spec = resolveCompactSpec(policy, context.contextWindow)
-    if (measurement.totalTokens < spec.thresholdTokens) return null
+    const header = pressure?.header ?? agent.session.requestHeader()
+    const outputHeadroom = header?.config.maxTokens ?? 0
+    const fixedRequestTokens = measurement.headerTokens
+      + Math.max(0, measurement.surfaceTokens - this.historyTokens(agent.session, measurement))
+      + outputHeadroom
+    const historyTokens = this.historyTokens(agent.session, measurement)
+    if (historyTokens === 0
+      || fixedRequestTokens + policy.safetyReserveTokens >= context.contextWindow) return null
+    const spec = resolveCompactSpec(policy, context.contextWindow, fixedRequestTokens)
+    if (historyTokens < spec.thresholdTokens) return null
 
     // Once pressure qualifies, land the model-free pass before choosing a
     // summary range, then remeasure through the singleton replay fold.
@@ -323,7 +343,7 @@ export class BasicCompactionEngine extends CompactionEngine {
       prune.pruneSession(agent.session)
       measurement = meter.measure(agent.session)
     }
-    if (measurement.totalTokens < spec.thresholdTokens) return null
+    if (this.historyTokens(agent.session, measurement) < spec.thresholdTokens) return null
 
     let result: CompactionResult | null = null
     for (let attempt = 0; attempt <= spec.compactionRetries; attempt += 1) {
@@ -336,12 +356,12 @@ export class BasicCompactionEngine extends CompactionEngine {
       }
       result = await this.compactRegion(range.start, range.end, agent, signal)
       measurement = meter.measure(agent.session)
-      if (measurement.totalTokens < spec.thresholdTokens) return result
+      if (this.historyTokens(agent.session, measurement) < spec.thresholdTokens) return result
     }
 
     throw new Error(
       `compaction still above threshold after ${spec.compactionRetries + 1} compaction attempts `
-      + `(${measurement.totalTokens} estimated tokens >= threshold ${spec.thresholdTokens})`,
+      + `(${this.historyTokens(agent.session, measurement)} estimated history tokens >= threshold ${spec.thresholdTokens})`,
     )
   }
 
@@ -431,6 +451,36 @@ export class BasicCompactionEngine extends CompactionEngine {
         { cause: error },
       )
     }
+  }
+
+  /** Measure the final request once, including uncommitted boundary messages. */
+  private pressureMeasurement(
+    session: Session,
+    header: EpochHeader,
+    messages: readonly Message[],
+  ): TokenMeasurement {
+    const measured = this.ctx.tokenMeter.measure(session, header)
+    const durable = session.deriveMessages()
+    const appended = messages.slice(durable.length)
+    const appendedTokens = appended.reduce(
+      (total, message) => total + this.ctx.tokenMeter.estimateMessage(message),
+      0,
+    )
+    return {
+      ...measured,
+      totalTokens: measured.totalTokens + appendedTokens,
+      surfaceTokens: measured.surfaceTokens + appendedTokens,
+    }
+  }
+
+  /** Count compactable history while treating runtime snapshots as fixed request overhead. */
+  private historyTokens(session: Session, measurement: TokenMeasurement): number {
+    const runtimeSeqs = new Set(session.events.filter(event =>
+      event.type === 'user/message' && isRuntimeContextMessage(event.data)).map(event => event.seq))
+    return measurement.nodes.reduce(
+      (total, node) => total + (runtimeSeqs.has(node.seq) ? 0 : node.tokens),
+      0,
+    )
   }
 
   /** Bind the effective token meter and dynamically dispatched summarizer hook. */

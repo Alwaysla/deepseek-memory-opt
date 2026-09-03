@@ -291,6 +291,7 @@ describe('compact configuration and defaults', () => {
     expect(resolved).toEqual({
       thresholdRatio: 0.8,
       retainRatio: 0.16,
+      safetyReserveTokens: 0,
       summarizationProvider: '',
       summarizationModel: '',
       maxTokens: 8192,
@@ -319,6 +320,20 @@ describe('compact configuration and defaults', () => {
       retainTokens: 70,
     })
     expect(retentionOnly).not.toHaveProperty('retainRatio')
+  })
+
+  it('subtracts fixed request and safety reserve before scaling exact history budgets', () => {
+    const policy = resolveTargetPolicy(resolveConfig({
+      thresholdRatio: 0.8,
+      retainRatio: 0.16,
+      safetyReserveTokens: 100,
+    }), { provider: MODEL, model: MODEL })
+    expect(resolveCompactSpec(policy, 1_000, 200)).toMatchObject({
+      historyCapacity: 700,
+      thresholdTokens: 560,
+      retainTokens: 112,
+      safetyReserveTokens: 100,
+    })
   })
 
   it('merges exact provider/model policy overrides and scales ratios per model', () => {
@@ -1435,10 +1450,17 @@ describe('default one-shot summarizer', () => {
 })
 
 describe('automatic listener and loader composition', () => {
-  function preStep(ctx: Context, owner: Agent, signal = SIGNAL) {
+  function preDispatch(ctx: Context, owner: Agent, signal = SIGNAL) {
+    const header = owner.session.requestHeader()
+    if (header === undefined) throw new Error('test session has no request header')
     return agentEvents(ctx, owner).waterfall(
-      'agent/pre-step', { messages: [], turn: 1, step: 1, signal },
-      () => Promise.resolve({ kind: 'enter' as const, messages: [] }),
+      'agent/pre-dispatch', {
+        request: { header, messages: owner.session.deriveMessages() },
+        turn: 1,
+        step: 1,
+        signal,
+      },
+      () => Promise.resolve(undefined),
     )
   }
 
@@ -1469,11 +1491,11 @@ describe('automatic listener and loader composition', () => {
       retainTokens: 180,
     })
     const pressured = conversation(4)
-    await preStep(ctx, agent(pressured, 'unconfigured-agent-fallback'))
+    await preDispatch(ctx, agent(pressured, 'unconfigured-agent-fallback'))
     expect(pressured.events.some(event => event.type === 'compaction/summary')).toBe(true)
 
     const small = conversation(1)
-    await preStep(ctx, agent(small, MODEL))
+    await preDispatch(ctx, agent(small, MODEL))
     expect(small.events.some(event => event.type === 'compaction/start')).toBe(false)
     expect(compact.calls).toHaveLength(1)
   })
@@ -1487,8 +1509,8 @@ describe('automatic listener and loader composition', () => {
     const pressured = conversation(4)
     const compactIfNeeded = vi.spyOn(compact, 'compactIfNeeded')
 
-    await expect(preStep(ctx, agent(pressured, MODEL), AbortSignal.abort('step aborted')))
-      .resolves.toEqual({ kind: 'enter', messages: [] })
+    await expect(preDispatch(ctx, agent(pressured, MODEL), AbortSignal.abort('step aborted')))
+      .resolves.toBeUndefined()
 
     expect(compactIfNeeded).not.toHaveBeenCalled()
     expect(pressured.events.some(event => event.type === 'compaction/start')).toBe(false)
@@ -1505,7 +1527,7 @@ describe('automatic listener and loader composition', () => {
     compact.error = 'temporary failure'
     const session = conversation(4)
 
-    await expect(preStep(ctx, agent(session, MODEL))).resolves.toEqual({ kind: 'enter', messages: [] })
+    await expect(preDispatch(ctx, agent(session, MODEL))).resolves.toBeUndefined()
     expect(warnings).toContainEqual(expect.stringContaining('temporary failure'))
     expect(session.events.some(event => event.type === 'compaction/summary')).toBe(false)
   })
@@ -1525,8 +1547,8 @@ describe('automatic listener and loader composition', () => {
     })
     const session = conversation(4)
 
-    await preStep(ctx, agent(session, MODEL))
-    await preStep(ctx, agent(session, MODEL))
+    await preDispatch(ctx, agent(session, MODEL))
+    await preDispatch(ctx, agent(session, MODEL))
 
     expect(warnings).toEqual([
       expect.stringContaining(`no context capacity for ${MODEL}/${MODEL}`),
@@ -1543,8 +1565,8 @@ describe('automatic listener and loader composition', () => {
     })
     const session = conversation(4)
 
-    await preStep(ctx, agent(session, MODEL))
-    await preStep(ctx, agent(session, MODEL))
+    await preDispatch(ctx, agent(session, MODEL))
+    await preDispatch(ctx, agent(session, MODEL))
 
     expect(warnings).toEqual([
       expect.stringContaining('retainTokens (500) must be less than threshold tokens 500'),
@@ -1828,7 +1850,7 @@ describe('automatic listener and loader composition', () => {
       retainTokens: 180,
     })
     const session = conversation(4)
-    await preStep(ctx, agent(session, MODEL))
+    await preDispatch(ctx, agent(session, MODEL))
     const summaries = session.events.filter(event => event.type === 'compaction/summary').length
     expect(summaries).toBe(1)
     expect(await recover(ctx, agent(session, MODEL), overflow())).toBe(false)
@@ -1843,7 +1865,7 @@ describe('automatic listener and loader composition', () => {
       retainTokens: 180,
     })
     const session = conversation(4)
-    await preStep(ctx, agent(session, MODEL))
+    await preDispatch(ctx, agent(session, MODEL))
     expect(session.events.some(event => event.type === 'compaction/start')).toBe(false)
     expect(await recover(ctx, agent(session, MODEL), overflow())).toBe(false)
   })
@@ -1873,7 +1895,7 @@ describe('automatic listener and loader composition', () => {
     await fiber.dispose()
 
     const session = conversation(4)
-    await preStep(ctx, agent(session, MODEL))
+    await preDispatch(ctx, agent(session, MODEL))
     expect(session.events.some(event => event.type === 'compaction/start')).toBe(false)
     expect(await recover(ctx, agent(session, MODEL), overflow())).toBe(false)
   })

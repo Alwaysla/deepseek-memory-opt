@@ -294,6 +294,10 @@
     - id: ui-trajectory
       name: '@deepseek-ai/dsh-client-ui-trajectory'
 
+    # Persistent session directives: peer view over the generic projection and command channel.
+    - id: ui-session-directives
+      name: '@deepseek-ai/dsh-client-ui-session-directives'
+
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #
 # Every row below composes what ONE agent contributes to the host registries:
@@ -364,6 +368,9 @@
 # session, so one host instance serves every session exactly as before presets.
 
 - id: tool-goal
+  disabled: true
+
+- id: session-directive-tools
   disabled: true
 
 - id: plan-mode

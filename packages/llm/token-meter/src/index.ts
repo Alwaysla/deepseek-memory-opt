@@ -119,6 +119,7 @@ export class TokenMeter extends Service {
       ? state.header
       : canonicalHeader(requestHeader)
     const anchor = state.anchor
+    const headerTokens = estimateHeader(header)
 
     let baseline: TokenMeasurementBaseline
     let surfaceDeltaTokens: number
@@ -131,7 +132,7 @@ export class TokenMeter extends Service {
     } else {
       baseline = {
         kind: 'estimated',
-        tokens: estimateHeader(header) + state.surfaceTokens,
+        tokens: headerTokens + state.surfaceTokens,
       }
       surfaceDeltaTokens = 0
     }
@@ -141,6 +142,7 @@ export class TokenMeter extends Service {
       baseline,
       surfaceDeltaTokens,
       totalTokens: Math.max(0, baseline.tokens + surfaceDeltaTokens),
+      headerTokens,
       surfaceTokens: state.surfaceTokens,
       nodes: state.surface,
     }))

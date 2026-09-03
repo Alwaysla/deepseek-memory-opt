@@ -160,6 +160,7 @@ describe('TokenMeter pricing', () => {
       baseline: { kind: 'none', tokens: 0 },
       surfaceDeltaTokens: 0,
       totalTokens: 0,
+      headerTokens: 0,
       surfaceTokens: 0,
       nodes: [],
     })

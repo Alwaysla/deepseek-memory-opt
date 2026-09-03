@@ -27,6 +27,7 @@ const POLICY_CONFIG_KEYS = [
   'thresholdRatio',
   'retainRatio',
   'retainTokens',
+  'safetyReserveTokens',
   'summarizationProvider',
   'summarizationModel',
   'maxTokens',
@@ -86,6 +87,7 @@ export function resolveConfig(config: BasicCompactionConfig = {}): ResolvedConfi
   return deepFreeze({
     thresholdRatio,
     ...retention,
+    safetyReserveTokens: config.safetyReserveTokens ?? 0,
     summarizationProvider: config.summarizationProvider ?? '',
     summarizationModel: config.summarizationModel ?? '',
     maxTokens: config.maxTokens ?? 8192,
@@ -116,6 +118,7 @@ export function resolveTargetPolicy(
     target: { provider: target.provider, model: target.model },
     thresholdRatio: override?.thresholdRatio ?? config.thresholdRatio,
     ...resolveRetention(override ?? {}, inheritedRetention),
+    safetyReserveTokens: override?.safetyReserveTokens ?? config.safetyReserveTokens,
     summarizationProvider: override?.summarizationProvider ?? config.summarizationProvider,
     summarizationModel: override?.summarizationModel ?? config.summarizationModel,
     maxTokens: override?.maxTokens ?? config.maxTokens,
@@ -128,11 +131,13 @@ export function resolveTargetPolicy(
  * Scale one routed policy into concrete token budgets for its model capacity.
  * @param policy - merged policy for the exact routed target.
  * @param contextWindow - positive adapter-owned capacity for that target.
+ * @param fixedRequestTokens - final request header, current boundary messages, and output headroom excluded from history.
  * @returns detached immutable pressure and retention budgets.
  */
 export function resolveCompactSpec(
   policy: ResolvedTargetPolicy,
   contextWindow: number,
+  fixedRequestTokens = 0,
 ): ResolvedCompactSpec {
   const targetKey = `${policy.target.provider}/${policy.target.model}`
   if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
@@ -141,9 +146,19 @@ export function resolveCompactSpec(
       `BasicCompactionConfig: contextWindow (${contextWindow}) must be a positive integer`,
     )
   }
-  const thresholdTokens = Math.floor(contextWindow * policy.thresholdRatio)
+  if (!Number.isInteger(fixedRequestTokens) || fixedRequestTokens < 0) {
+    throw new TargetPressureConfigError(
+      targetKey,
+      `BasicCompactionConfig: fixedRequestTokens (${fixedRequestTokens}) must be a non-negative integer`,
+    )
+  }
+  const historyCapacity = Math.max(
+    0,
+    contextWindow - fixedRequestTokens - policy.safetyReserveTokens,
+  )
+  const thresholdTokens = Math.floor(historyCapacity * policy.thresholdRatio)
   const retainTokens = policy.retainTokens === undefined
-    ? Math.floor(contextWindow * policy.retainRatio)
+    ? Math.floor(historyCapacity * policy.retainRatio)
     : policy.retainTokens
   if (retainTokens >= thresholdTokens) {
     throw new TargetPressureConfigError(
@@ -155,7 +170,9 @@ export function resolveCompactSpec(
   return deepFreeze({
     target: { ...policy.target },
     contextWindow,
+    historyCapacity,
     thresholdRatio: policy.thresholdRatio,
+    safetyReserveTokens: policy.safetyReserveTokens,
     thresholdTokens,
     retainTokens,
     summarizationProvider: policy.summarizationProvider,
@@ -231,12 +248,16 @@ function validatePolicy(
   const thresholdRatio = config.thresholdRatio
   const retainRatio = config.retainRatio
   const retainTokens = config.retainTokens
+  const safetyReserveTokens = config.safetyReserveTokens
   const maxTokens = config.maxTokens
   const compactionRetries = config.compactionRetries
   const maxOverflowRetries = config.maxOverflowRetries
   if (thresholdRatio !== undefined) assertRatio(`${name}.thresholdRatio`, thresholdRatio)
   if (retainRatio !== undefined) assertRatio(`${name}.retainRatio`, retainRatio)
   if (retainTokens !== undefined) assertNonNegativeInteger(`${name}.retainTokens`, retainTokens)
+  if (safetyReserveTokens !== undefined) {
+    assertNonNegativeInteger(`${name}.safetyReserveTokens`, safetyReserveTokens)
+  }
   if (retainRatio !== undefined && retainTokens !== undefined) {
     throw new Error(`${name}: retainRatio and retainTokens are mutually exclusive`)
   }

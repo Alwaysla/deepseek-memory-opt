@@ -19,6 +19,8 @@ interface TokenMeasurement {
   readonly surfaceDeltaTokens: number
   /** Non-negative current request-and-response pressure. */
   readonly totalTokens: number
+  /** Heuristic tokens for the measured canonical request header. */
+  readonly headerTokens: number
   /** Total heuristic tokens across the current surface. */
   readonly surfaceTokens: number
   /** Current surface nodes in positional head-to-tail order. */

@@ -7,8 +7,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
-import type { LlmCallConfig, LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
-import type { AgentCancelCause, Session, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
+import type { LlmCallConfig, LlmFailure, Message, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
+import type { AgentCancelCause, EpochHeader, Session, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 export type { AgentCancelCause } from '@deepseek-ai/dsh-session'
 import type { Inbox } from './inbox.ts'
 import type { InboxTarget } from './types.ts'
@@ -53,6 +53,17 @@ export type AgentStatus = 'idle' | 'running'
 export type PreStepDecision =
   | { kind: 'reject' }
   | { kind: 'enter'; messages: UserMessage[] }
+
+/** Final canonical request inputs exposed before model dispatch. */
+export interface PreDispatchRequest {
+  /** Canonical request header after route middleware and adapter defaults resolve. */
+  readonly header: EpochHeader
+  /** Complete model-visible messages at this dispatch boundary. */
+  readonly messages: readonly Message[]
+}
+
+/** Action returned before dispatch when durable request inputs changed and must be rebuilt. */
+export type PreDispatchAction = { kind: 'retry' } | undefined
 
 /** Action returned by a listener that owns model-request recovery. */
 export type RequestErrorAction = { kind: 'retry' } | undefined
@@ -242,6 +253,21 @@ declare module '@deepseek-ai/cordis' {
      * @mode waterfall
     */
     'agent/request'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
+    /**
+     * Inspect or prepare durable state for the exact request immediately before
+     * dispatch. The canonical header and complete boundary messages are fixed
+     * for this attempt. Return `{ kind: 'retry' }` after changing durable request
+     * inputs so the loop rebuilds instead of dispatching the stale snapshot.
+     * @param payload.agent - the agent making the model call.
+     * @param payload.turn - the open turn number.
+     * @param payload.step - the step containing this request attempt.
+     * @param payload.request - final canonical header and boundary messages.
+     * @param payload.signal - the turn cancellation signal.
+     * @param next - delegates to the next listener; its result is the downstream decision.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode waterfall
+     */
+    'agent/pre-dispatch'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; request: PreDispatchRequest; signal: AbortSignal }, next: () => Promise<PreDispatchAction>): Promise<PreDispatchAction>
     /**
      * Handle one failed model-request attempt before the loop retries or closes
      * its step. A listener returns `{ kind: 'retry' }` without calling `next()`

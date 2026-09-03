@@ -325,6 +325,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Plugins register direct human commands without sending invocations to the model.',
   },
   {
+    key: 'sessionDirectives',
+    pkg: 'session-directives',
+    title: 'Session directive state',
+    mode: 'core',
+    consumers: ['session-directive-consumers', 'client-ui-session-directives'],
+    note: 'Folds durable whole-state changes, publishes the active projection, and renders bounded model-visible runtime context for the owning session.',
+  },
+  {
     key: 'sessionProjections',
     pkg: 'session-projection',
     title: 'Session projection units',

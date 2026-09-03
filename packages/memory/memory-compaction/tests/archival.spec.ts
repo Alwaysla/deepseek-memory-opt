@@ -135,7 +135,7 @@ describe('MemoryCompactionEngine archival', () => {
       .map(block => block.type === 'text' ? block.text : '').join('\n')
     expect(summarizerText).not.toContain('CATALOG_SECRET')
     expect(summarizerText).toContain('WORKSPACE_VISIBLE')
-    expect(record.shadowedSeqs).not.toContain(catalog.seq)
+    expect(record.shadowedSeqs).toContain(catalog.seq)
     const spill = await readFile(record.locator!, 'utf8')
     expect(spill).not.toContain('CATALOG_SECRET')
     expect(spill).toContain('WORKSPACE_VISIBLE')

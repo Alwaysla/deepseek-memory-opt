@@ -1195,6 +1195,38 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'sessionDirectives',
+    summary: 'Durable session-directive service (`ctx.sessionDirectives`).',
+    description: 'Durable session-directive service (`ctx.sessionDirectives`).',
+    methods: [
+      {
+        signature: 'list(session: Session): SessionDirective[]',
+        description: 'List active directives in stable order.',
+        parameters: [{ name: 'session', description: 'owning session.' }],
+        returns: 'a detached list reconstructed from its durable log.',
+      },
+      {
+        signature: 'set(session: Session, request: SetDirectiveRequest): SessionDirective',
+        description: 'Add or replace one directive by stable key and append the complete resulting state. Existing keys retain their position. Rejected writes append nothing.',
+        parameters: [{ name: 'session', description: 'owning session.' }, { name: 'request', description: 'directive value and required source/scope attribution.' }],
+        returns: 'a detached accepted directive.',
+        throws: ['{@link SessionDirectivesError} when input or complete rendered state exceeds a configured limit.'],
+      },
+      {
+        signature: 'remove(session: Session, key: string): boolean',
+        description: 'Remove one stable key and append the complete resulting state.',
+        parameters: [{ name: 'session', description: 'owning session.' }, { name: 'key', description: 'exact normalized key to remove.' }],
+        returns: 'whether the key existed; an absent key appends no event.',
+      },
+      {
+        signature: 'clear(session: Session): boolean',
+        description: 'Clear all active directives with one complete-state event.',
+        parameters: [{ name: 'session', description: 'owning session.' }],
+        returns: 'whether any directive existed; an empty state appends no event.',
+      },
+    ],
+  },
+  {
     key: 'sessionPersistence',
     summary: 'Durable append-only session storage.',
     description: 'Durable append-only session storage. Implementations preserve contiguous, losslessly JSON-serializable events; append resolves only after durability, and load balances a complete interrupted tail without rewriting committed events.',
@@ -2446,6 +2478,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'One message entered the live inbox.',
     description: 'One message entered the live inbox.',
     parameters: [{ name: 'payload', description: '.message - the inserted message. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
+  },
+  {
+    name: 'agent/pre-dispatch',
+    mode: 'waterfall',
+    signature: '\'agent/pre-dispatch\'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; request: PreDispatchRequest; signal: AbortSignal }, next: () => Promise<PreDispatchAction>): Promise<PreDispatchAction>',
+    summary: 'Inspect or prepare durable state for the exact request immediately before dispatch.',
+    description: 'Inspect or prepare durable state for the exact request immediately before dispatch. The canonical header and complete boundary messages are fixed for this attempt. Return `{ kind: \'retry\' }` after changing durable request inputs so the loop rebuilds instead of dispatching the stale snapshot.',
+    parameters: [{ name: 'payload', description: '.signal - the turn cancellation signal.' }, { name: 'next', description: 'delegates to the next listener; its result is the downstream decision. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
   },
   {
     name: 'agent/pre-step',
@@ -3832,6 +3872,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    additionalContexts?: UserMessage[];\n};',
   },
   {
+    name: 'PreDispatchAction',
+    declaration: 'export type PreDispatchAction = {\n    kind: \'retry\';\n} | undefined;',
+  },
+  {
+    name: 'PreDispatchRequest',
+    declaration: 'export interface PreDispatchRequest {\n    readonly header: EpochHeader;\n    readonly messages: readonly Message[];\n}',
+  },
+  {
     name: 'PreparedAdapterCall',
     declaration: 'export interface PreparedAdapterCall {\n    readonly model: LlmResolvedModelInfo;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
@@ -4096,6 +4144,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SessionAvailability = \'live\' | \'persisted\';',
   },
   {
+    name: 'SessionDirective',
+    declaration: 'export interface SessionDirective {\n    readonly key: string;\n    readonly value: string;\n    readonly source: string;\n    readonly scope: \'session\';\n}',
+  },
+  {
     name: 'SessionEvent',
     declaration: 'export type SessionEvent<T extends SessionEventType = SessionEventType> = {\n    [K in SessionEventType]: {\n        type: K;\n        seq: number;\n        time: number;\n        data: SessionEventMap[K];\n        ignorable?: true;\n    } & (K extends SurfaceEventType ? {\n        sourceEventSeqs?: number[];\n        surfaceOp?: SurfaceOp;\n    } : object);\n}[T];',
   },
@@ -4330,6 +4382,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionTitleUserMessage',
     declaration: 'export interface SessionTitleUserMessage {\n    readonly seq: number;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'SetDirectiveRequest',
+    declaration: 'export interface SetDirectiveRequest {\n    readonly key: string;\n    readonly value: string;\n    readonly source: string;\n    readonly scope: \'session\';\n}',
   },
   {
     name: 'SettingsApplies',
@@ -4749,7 +4805,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TokenMeasurement',
-    declaration: 'export interface TokenMeasurement {\n    readonly logRevision: number;\n    readonly baseline: TokenMeasurementBaseline;\n    readonly surfaceDeltaTokens: number;\n    readonly totalTokens: number;\n    readonly surfaceTokens: number;\n    readonly nodes: readonly TokenSurfaceNode[];\n}',
+    declaration: 'export interface TokenMeasurement {\n    readonly logRevision: number;\n    readonly baseline: TokenMeasurementBaseline;\n    readonly surfaceDeltaTokens: number;\n    readonly totalTokens: number;\n    readonly headerTokens: number;\n    readonly surfaceTokens: number;\n    readonly nodes: readonly TokenSurfaceNode[];\n}',
   },
   {
     name: 'TokenMeasurementBaseline',

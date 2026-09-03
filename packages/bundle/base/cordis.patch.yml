@@ -126,6 +126,16 @@
     - id: session-projection
       name: '@deepseek-ai/dsh-session-projection'
 
+    # Durable directive state and projection are shared Host capabilities. The
+    # service keys state by Session and publishes runtime context for every
+    # surface; model-facing controls remain an agent-plane choice below.
+    - id: session-directives
+      name: '@deepseek-ai/dsh-session-directives'
+      config:
+        maxEntries: 12
+        maxTokens: 256
+        valueMaxChars: 200
+
     # Session telemetry is mounted but disabled by default. DSH_TELEMETRY_MODE
     # explicitly opts into FULL or FEEDBACK_ONLY reporting; uploading mirrors
     # session-log records onto OTLP/HTTP logs with no session-telemetry/record redaction
@@ -250,6 +260,11 @@
     - id: commands
       name: '@deepseek-ai/dsh-commands'
 
+    # Human command and root-message recognition are Host-owned so every session
+    # uses one authority path; model tools remain an agent-plane choice.
+    - id: session-directive-consumers
+      name: '@deepseek-ai/dsh-session-directive-consumers'
+
     - id: command-feedback
       name: '@deepseek-ai/dsh-command-feedback'
 
@@ -373,6 +388,11 @@
     # domain, driver, and `/goal` command are above.
     - id: tool-goal
       name: '@deepseek-ai/dsh-tool-goal'
+
+    # The single-session base surface selects the directive model controls. Web
+    # disables this row and lets each full preset opt in independently.
+    - id: session-directive-tools
+      name: '@deepseek-ai/dsh-session-directive-consumers/tools'
 
     # Fresh-agent Ralph iteration over a build-time-fixed script.
     - id: tool-ralph

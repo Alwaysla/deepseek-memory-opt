@@ -28,14 +28,41 @@ describe('memory archive projection', () => {
     }])
   })
 
-  it('drops a snapshot whose only section is the memory catalog', () => {
+  it.each([
+    ['memory:catalog', 'CATALOG_SECRET'],
+    ['session:directives', 'Always answer concisely.'],
+  ])('drops a snapshot whose only section is %s', (name, text) => {
     const message = createUserMessage({
-      content: [{ type: 'text', text: 'CATALOG_SECRET' }],
+      content: [{ type: 'text', text }],
       source: {
         kind: 'plugin', plugin: '@deepseek-ai/dsh-system-prompt', form: 'snapshot',
-        sections: [{ name: 'memory:catalog', text: 'CATALOG_SECRET' }],
+        sections: [{ name, text }],
       },
     })
     expect(projectMemoryArchive([message])).toEqual([])
+  })
+
+  it('removes directives and catalog while preserving episodic context', () => {
+    const message = createUserMessage({
+      content: [{ type: 'text', text: 'aggregate' }],
+      source: {
+        kind: 'plugin', plugin: '@deepseek-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [
+          { name: 'session:directives', text: 'Always answer concisely.' },
+          { name: 'memory:catalog', text: 'CATALOG_SECRET' },
+          { name: 'workspace:notice', text: 'Build completed.' },
+        ],
+      },
+    })
+
+    const [projected] = projectMemoryArchive([message])
+    expect(projected?.source).toMatchObject({
+      form: 'snapshot',
+      sections: [{ name: 'workspace:notice', text: 'Build completed.' }],
+    })
+    expect(projected?.content).toEqual([{
+      type: 'text',
+      text: 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nBuild completed.',
+    }])
   })
 })

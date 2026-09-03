@@ -225,6 +225,23 @@ type PreStepDecision =
   | { kind: 'enter'; messages: UserMessage[] }
 ```
 
+`agent/pre-dispatch` runs after final request assembly and immediately before `llm.stream`. It receives the canonical header and complete model-visible messages. A listener that changes durable request inputs returns `{ kind: 'retry' }`, causing the loop to rebuild instead of dispatching that snapshot.
+
+```ts type-equiv
+/** Final canonical request inputs exposed before model dispatch. */
+interface PreDispatchRequest {
+  /** Canonical request header after route middleware and adapter defaults resolve. */
+  readonly header: EpochHeader
+  /** Complete model-visible messages at this dispatch boundary. */
+  readonly messages: readonly Message[]
+}
+```
+
+```ts type-equiv
+/** Action returned before dispatch when durable request inputs changed and must be rebuilt. */
+type PreDispatchAction = { kind: 'retry' } | undefined
+```
+
 `agent/request-error` runs after a failed model step closes and before its turn closes. Listeners can repair durable state or await policy work while the failed turn's signal is still live. A handling listener returns `{ kind: 'retry' }` without calling `next()`; the default `undefined` leaves the failure terminal.
 
 ```ts type-equiv
@@ -232,7 +249,7 @@ type PreStepDecision =
 type RequestErrorAction = { kind: 'retry' } | undefined
 ```
 
-`agent/pre-step` is the only serial listener chain before request derivation. `agent/turn-stopping` runs when a turn has no tool or steering continuation, before one final steering drain.
+`agent/pre-step` is the serial admission chain before request derivation; `agent/pre-dispatch` is the serial final-request chain. `agent/turn-stopping` runs when a turn has no tool or steering continuation, before one final steering drain.
 
 `agent/session-start` carries a `SessionStartSource` (why the session lifecycle began; a bridge keys its SessionStart matcher on it):
 
@@ -240,6 +257,12 @@ type RequestErrorAction = { kind: 'retry' } | undefined
 /** Why a session lifecycle began; seeded creates are `startup`, while persisted loads are `resume`. */
 type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact'
 ```
+
+## Session directives
+
+`SessionDirective` is one stable-keyed instruction projected into each request for its owning session. `SetDirectiveRequest` carries the key, model-facing value, and producer attribution accepted by `ctx.sessionDirectives.set()`.
+
+Source: [`packages/context/session-directives/src/types.ts`](../../packages/context/session-directives/src/types.ts) and [`packages/context/session-directives/src/index.ts`](../../packages/context/session-directives/src/index.ts)
 
 ## Sessions
 
@@ -722,6 +745,50 @@ roots(): Agent[]
 
 Source: [`packages/core/agent/src/index.ts`](../../packages/core/agent/src/index.ts)
 
+<a id="ctxsessiondirectives--sessiondirectivesservice"></a>
+
+### `ctx.sessionDirectives` — `SessionDirectivesService`
+
+Durable session-directive service (`ctx.sessionDirectives`).
+
+```ts cordis-catalog
+/**
+ * List active directives in stable order.
+ * @param session - owning session.
+ * @returns a detached list reconstructed from its durable log.
+ */
+list(session: Session): SessionDirective[]
+
+/**
+ * Add or replace one directive by stable key and append the complete resulting state.
+ * Existing keys retain their position. Rejected writes append nothing.
+ * @param session - owning session.
+ * @param request - directive value and required source/scope attribution.
+ * @returns a detached accepted directive.
+ * @throws {@link SessionDirectivesError} when input or complete rendered state exceeds a configured limit.
+ */
+set(session: Session, request: SetDirectiveRequest): SessionDirective
+
+/**
+ * Remove one stable key and append the complete resulting state.
+ * @param session - owning session.
+ * @param key - exact normalized key to remove.
+ * @returns whether the key existed; an absent key appends no event.
+ */
+remove(session: Session, key: string): boolean
+
+/**
+ * Clear all active directives with one complete-state event.
+ * @param session - owning session.
+ * @returns whether any directive existed; an empty state appends no event.
+ */
+clear(session: Session): boolean
+```
+
+Types: [Session](session.md)
+
+Source: [`packages/context/session-directives/src/index.ts`](../../packages/context/session-directives/src/index.ts)
+
 <a id="agent-events"></a>
 
 ### `agent/*` events
@@ -859,6 +926,34 @@ One message entered the live inbox.
 ```
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
+
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
+
+<a id="agentpre-dispatch--waterfall"></a>
+
+#### `agent/pre-dispatch` — waterfall
+
+Inspect or prepare durable state for the exact request immediately before dispatch. The canonical header and complete boundary messages are fixed for this attempt. Return `{ kind: 'retry' }` after changing durable request inputs so the loop rebuilds instead of dispatching the stale snapshot.
+
+```ts cordis-catalog
+/**
+ * Inspect or prepare durable state for the exact request immediately before
+ * dispatch. The canonical header and complete boundary messages are fixed
+ * for this attempt. Return `{ kind: 'retry' }` after changing durable request
+ * inputs so the loop rebuilds instead of dispatching the stale snapshot.
+ * @param payload.agent - the agent making the model call.
+ * @param payload.turn - the open turn number.
+ * @param payload.step - the step containing this request attempt.
+ * @param payload.request - final canonical header and boundary messages.
+ * @param payload.signal - the turn cancellation signal.
+ * @param next - delegates to the next listener; its result is the downstream decision.
+ * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+ * @mode waterfall
+ */
+'agent/pre-dispatch'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; request: PreDispatchRequest; signal: AbortSignal }, next: () => Promise<PreDispatchAction>): Promise<PreDispatchAction>
+```
+
+Types: [Scoped](scope.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
