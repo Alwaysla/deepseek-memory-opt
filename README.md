@@ -1,83 +1,174 @@
-# DeepSeek Harness with Memory Optimization
+# DeepSeek Harness 记忆优化版
 
-English | [中文](README.zh.md)
+[English](README.en.md) | 中文
 
-During long-running tasks, context explosion is often one of the most troublesome problems. Without compaction, the AI gradually becomes increasingly incoherent; with compaction, there is always the concern that critical information may be lost, causing the AI to make a mess of things again. This led me to consider a context-preservation mechanism designed for long-running tasks:
+面向长任务的 DeepSeek Harness 分支：在官方插件化 Agent Harness 上加入**标签索引记忆、按需召回、会话持续指令和按历史容量触发的上下文压缩**，让模型保留更多可恢复的信息，同时控制每次请求的上下文规模。
 
-When context usage exceeds a configured threshold, the historical context is categorized, packaged, and persisted to disk. It is then replaced in the active context with a tag that records only its index. When the current task needs that portion of the context, the system retrieves it from the log using the tag. After it has been used, the retrieved content is put away again and archived under a new context tag. This provides a form of memory management that gives the AI access to more extensive, longer-term memory without causing the active context to explode.
+> 本项目基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 扩展，遵循 [MIT License](LICENSE)。当前仍处于开发者预览阶段，配置和持久化格式可能发生不兼容变更。
 
-This implementation benefits from two important DeepSeek Harness plugins. The first is subagent, which delegates context-polluting tasks to subagents so that the main agent retains only conclusions and critical information. The second is compaction-basic, which provides a simple context-discarding mechanism. When current context usage exceeds a configured threshold, part of the context is folded into a labeled placeholder, thereby reducing the size of the active context.
+## 核心特性
 
-However, this compaction mechanism only reduces the current conversation context while leaving the original log unchanged; it does not provide a way to index historical context.
+- 🧠 **标签索引记忆**：压缩旧对话时生成标签和摘要，并把原始事件位置记录到持久化会话日志。
+- 🔎 **按需精准召回**：模型先看到有界的 `tags + digest` 目录，仅在需要旧细节时调用 `recall_memory(tags)`。
+- ♻️ **召回后自动折回**：完整召回内容保留有限 step，随后重新折叠，避免历史内容再次撑大上下文。
+- 📌 **会话持续指令**：将“之后都保持回答简洁”等长期要求保存为独立会话状态，不依赖模型主动回忆。
+- 🧭 **可视化指令管理**：Web UI 在 Chat 和 Trajectory 旁提供“持续指令”面板，支持新增、编辑、删除和清空。
+- 📐 **历史容量压缩**：从模型窗口扣除 header、运行时上下文、输出余量和安全保留量后，再计算压缩阈值。
+- 🧩 **一切皆插件**：记忆、召回、持续指令和 Web 面板均通过 [Cordis](https://github.com/cordiverse/cordis) 组合，可按 profile 替换或裁剪。
 
-My implementation adds categorization during folding, on-demand recall, and re-archival after recalled content has been used.
+## 工作方式
 
-> **Note**: This is a fork of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) with additional features. All modifications follow the MIT License.
->
-> **Added Features**:
-> - **Tag-indexed memory**: Long-term memory system with on-demand retrieval of archived conversation spans
->   - `memory-core`: Content-hash indexed archival events and memory projection
->   - `memory-compaction`: Tag-aware compaction backend that archives and indexes spans
->   - `memory-catalog`: Bounded recent tag-and-digest catalog in every relevant model request
->   - `tool-recall`: `recall_memory(tags)` tool for deterministic span reconstruction
->   - `memory-ttl-pruner`: Automatic fold-back of aged recalled content
->
-> For details, see [Agent Note: Tag-indexed memory](.agents/notes/implemented/feature/2026-08-26-tag-indexed-memory.md).
-
----
-
-DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
-
-It uses an architecture where **everything is a plugin**, and is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
-
-## Developer preview
-
-DeepSeek Harness is currently in _developer preview_ and is iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
-
-## Run
-
-### Run from `npm`
-
-Install `Node.js`, then run:
-
-```sh
-npx @deepseek-ai/dsh web
+```text
+较早的对话历史
+      │
+      ▼
+memory-compaction ── 生成摘要、标签和归档索引
+      │
+      ├── 当前上下文只保留摘要
+      └── 原始事件仍保存在 Session log
+                         │
+                         ▼
+memory-catalog ── 每次相关请求提供有界 tags + digest
+                         │
+               模型判断需要旧细节
+                         │
+                         ▼
+recall_memory(tags) ── 从 Session log 重建原始片段
+                         │
+                         ▼
+memory-ttl-pruner ── 若干 step 后再次折回
 ```
 
-The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
+持续指令走独立路径：指令通过 `directive/change` 事件持久化，并作为 `session:directives` 运行时上下文注入相关模型请求。记忆目录和持续指令都是当前状态，不会被递归归档为情景记忆。
 
-### Run from source
+<a id="run"></a>
 
-To run from a repository checkout:
+## 快速开始
+
+### 环境要求
+
+- Node.js `^22.19.0` 或 `>=24.0.0`
+- pnpm `11.7.0`
+- 可用的模型凭据，例如 `DEEPSEEK_API_KEY`
+
+<a id="run-from-source"></a>
+
+### 从源码运行本分支
 
 ```sh
-git clone https://github.com/Alwaysla/deepseek-memory-opt.git
+git clone https://github.com/Alwaysla/deepseek-memory-opt.git deepseek-harness
 cd deepseek-harness
 pnpm install
 pnpm run build
 pnpm dsh web
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+打开 `http://127.0.0.1:3080`。`pnpm run build` 生成仓库产物，`pnpm dsh web` 使用这些产物启动 Web UI，不会自动重新构建。
 
-## Community and support
+> `npx @deepseek-ai/dsh web` 安装并运行的是官方 npm 包，不包含本分支的记忆和持续指令扩展。
 
-- Feel free to submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
-- Join <a href="https://discord.gg/Ycq5dCaS4">DeepSeek Harness Discord community</a>.
+## 使用持续指令
 
-## Contributing
+### Web UI
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+进入一个会话，打开与 Chat、Trajectory 同级的“持续指令”面板，即可添加、编辑、删除或清空当前会话的指令。刷新页面或压缩原始用户消息后，未删除的指令仍然有效。
 
-## Development
+### 命令
 
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
+```text
+/directive list
+/directive set <key> <JSON-string value>
+/directive delete <key>
+/directive clear
+```
 
-For agents, follow [AGENTS.md](AGENTS.md).
+示例：
 
-## License
+```text
+/directive set response.concise "回答尽量简洁"
+```
 
-[MIT](LICENSE)
+标准、Code 和 Cordis agent preset 还向模型提供 `list_directives`、`set_directive` 与 `remove_directive` 工具。变更工具只接受当前顶层用户消息中的明确持久化或删除意图；一次性要求、旧消息、网页内容、召回文本和工具输出不能授权持久变更。
 
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## 记忆召回
+
+记忆目录会自动以精简的标签和摘要进入相关请求，但不会自动加载所有归档全文。模型判断当前任务依赖某段旧信息时，才会调用：
+
+```text
+recall_memory({ tags: ["session-directives", "compaction"] })
+```
+
+召回内容以持久化 Session log 为事实来源。外部 transcript 仅用于检查，不决定召回结果。
+
+## 默认 Web 配置
+
+```yaml
+- insert:
+    - id: memory-compaction
+      name: '@deepseek-ai/dsh-memory-compaction'
+      config:
+        thresholdRatio: 0.45
+        retainRatio: 0.12
+        maxTokens: 8192
+        compactionRetries: 1
+
+    - id: memory-catalog
+      name: '@deepseek-ai/dsh-memory-catalog'
+      config:
+        maxEntries: 20
+        maxTokens: 1200
+        digestMaxChars: 160
+
+    - id: memory-ttl-pruner
+      name: '@deepseek-ai/dsh-memory-ttl-pruner'
+      config:
+        retainSteps: 2
+```
+
+参数含义：
+
+- `thresholdRatio`：历史消息达到可用历史容量的 45% 时触发主动压缩。
+- `retainRatio`：压缩后目标保留约 12% 的历史容量。
+- `maxTokens`（memory-compaction）：摘要模型单次输出上限，不是触发阈值或上下文窗口大小。
+- `maxEntries` / `maxTokens` / `digestMaxChars`（memory-catalog）：限制模型每次看到的记忆目录规模。
+- `retainSteps`：完整召回结果在上下文中保留的 step 数。
+
+实际装配以 [`packages/bundle/web-app/cordis.patch.yml`](packages/bundle/web-app/cordis.patch.yml) 为准。
+
+## 验证功能
+
+1. 在“持续指令”面板添加一条指令并刷新页面，确认它仍然存在。
+2. 继续发送消息，确认指令出现在模型运行时上下文并影响回复。
+3. 删除指令并刷新，确认它不再出现，也不再约束后续回复。
+4. 进行足够长的会话触发压缩，确认记忆目录出现 `tags + digest`。
+5. 要求模型继续依赖早期细节，确认它通过 `recall_memory` 取回归档片段。
+
+## 文档
+
+- [当前工作区的记忆、持续指令与压缩设计说明](Markdown/Deepseek-harness-memory-opt.md)
+- [标签索引记忆 Agent Note](.agents/notes/implemented/feature/2026-08-26-tag-indexed-memory.zh.md)
+- [有界记忆目录 Agent Note](.agents/notes/implemented/feature/2026-09-02-bounded-memory-catalog.zh.md)
+- [会话指令与历史容量压缩 Agent Note](.agents/notes/implemented/architecture/2026-09-03-session-directives-and-history-capacity-compaction.zh.md)
+- [DeepSeek Harness 架构](docs/architecture.zh.md)
+- [Web UI 使用指南](docs/user/guide/index.zh.md)
+
+## 开发
+
+```sh
+pnpm run typecheck
+pnpm run test
+pnpm run test:gui
+pnpm run doc-sync
+```
+
+修改代码前请阅读[开发指南](docs/development.zh.md)、[贡献指南](CONTRIBUTING.zh.md)和面向 agent 的 [AGENTS.md](AGENTS.md)。
+
+## 社区与支持
+
+- 本分支问题与建议：[Alwaysla/deepseek-memory-opt Issues](https://github.com/Alwaysla/deepseek-memory-opt/issues)
+- 上游讨论：[DeepSeek Harness Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions)
+- 插件生态：为插件仓库添加 [`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
