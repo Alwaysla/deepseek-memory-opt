@@ -303,6 +303,9 @@ importers:
       '@deepseek-ai/dsh-web-app':
         specifier: workspace:^
         version: link:../../packages/bundle/web-app
+      '@deepseek-ai/dsh-web-search-tavily':
+        specifier: workspace:^
+        version: link:../../packages/web/web-search-tavily
       '@deepseek-ai/dsh-workflow-worker-thread':
         specifier: workspace:^
         version: link:../../packages/workflow/workflow-worker-thread
@@ -580,12 +583,12 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../packages/core/session
-      '@deepseek-ai/dsh-session-directives':
-        specifier: workspace:*
-        version: link:../packages/context/session-directives
       '@deepseek-ai/dsh-session-checkpoint-policy':
         specifier: workspace:*
         version: link:../packages/session/session-checkpoint-policy
+      '@deepseek-ai/dsh-session-directives':
+        specifier: workspace:*
+        version: link:../packages/context/session-directives
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: workspace:*
         version: link:../packages/session/session-persistence-jsonl
@@ -1108,15 +1111,15 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@deepseek-ai/dsh-session-checkpoint-policy':
+        specifier: workspace:^
+        version: link:../../session/session-checkpoint-policy
       '@deepseek-ai/dsh-session-directive-consumers':
         specifier: workspace:^
         version: link:../../context/session-directive-consumers
       '@deepseek-ai/dsh-session-directives':
         specifier: workspace:^
         version: link:../../context/session-directives
-      '@deepseek-ai/dsh-session-checkpoint-policy':
-        specifier: workspace:^
-        version: link:../../session/session-checkpoint-policy
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: workspace:^
         version: link:../../session/session-persistence-jsonl
@@ -1216,9 +1219,6 @@ importers:
       '@deepseek-ai/dsh-tool-todo':
         specifier: workspace:^
         version: link:../../todo/tool-todo
-      '@deepseek-ai/dsh-tool-web':
-        specifier: workspace:^
-        version: link:../../web/tool-web
       '@deepseek-ai/dsh-tool-workflow':
         specifier: workspace:^
         version: link:../../workflow/tool-workflow
@@ -1240,9 +1240,9 @@ importers:
       '@deepseek-ai/dsh-web':
         specifier: workspace:^
         version: link:../../web/web
-      '@deepseek-ai/dsh-web-search-deepseek':
+      '@deepseek-ai/dsh-web-search-tavily':
         specifier: workspace:^
-        version: link:../../web/web-search-deepseek
+        version: link:../../web/web-search-tavily
       '@deepseek-ai/dsh-workflow-worker-thread':
         specifier: workspace:^
         version: link:../../workflow/workflow-worker-thread
@@ -8814,6 +8814,28 @@ importers:
         specifier: workspace:^
         version: link:../web
 
+  packages/web/web-search-tavily:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:^
+        version: link:../../util/launch-environment
+      '@deepseek-ai/dsh-web':
+        specifier: workspace:^
+        version: link:../web
+
   packages/workflow/tool-ralph:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -9348,6 +9370,9 @@ importers:
       '@deepseek-ai/dsh-web-search-perplexity':
         specifier: workspace:^
         version: link:../../packages/web/web-search-perplexity
+      '@deepseek-ai/dsh-web-search-tavily':
+        specifier: workspace:^
+        version: link:../../packages/web/web-search-tavily
       '@deepseek-ai/dsh-workflow':
         specifier: workspace:^
         version: link:../../packages/workflow/workflow

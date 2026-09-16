@@ -107,7 +107,6 @@
     "@deepseek-ai/dsh-tool-subagent-report": "workspace:^",
     "@deepseek-ai/dsh-tool-jobs": "workspace:^",
     "@deepseek-ai/dsh-tool-todo": "workspace:^",
-    "@deepseek-ai/dsh-tool-web": "workspace:^",
     "@deepseek-ai/dsh-tool-workflow": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/dsh-typert-loader": "workspace:^",
@@ -115,7 +114,7 @@
     "@deepseek-ai/dsh-user-approval": "workspace:^",
     "@deepseek-ai/dsh-user-questions": "workspace:^",
     "@deepseek-ai/dsh-web": "workspace:^",
-    "@deepseek-ai/dsh-web-search-deepseek": "workspace:^",
+    "@deepseek-ai/dsh-web-search-tavily": "workspace:^",
     "@deepseek-ai/dsh-workflow-worker-thread": "workspace:^",
     "@deepseek-ai/dsh-agent-instructions": "workspace:^"
   },

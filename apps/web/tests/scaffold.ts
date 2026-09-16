@@ -261,12 +261,12 @@ export interface LaunchOptions {
   /** Leave the current welcome notice pending; ordinary scenarios pre-acknowledge it before browser boot. */
   welcomeNoticePending?: boolean
   /**
-   * Patch the shipped DeepSeek search row to a deterministic endpoint and
+   * Patch the shipped Tavily search row to a deterministic endpoint and
    * credential reference. Browser search scenarios keep the real provider and
    * credentials seam while avoiding external search traffic and ambient keys.
    */
-  deepSeekSearch?: {
-    /** Anthropic-compatible base URL; the provider appends `/messages`. */
+  tavilySearch?: {
+    /** Tavily-compatible base URL; the provider appends `/search`. */
     baseURL: string
     /** Credential reference resolved by the shipped search provider. */
     apiKeyEnv: string
@@ -502,13 +502,13 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
         { id: 'tool-cordis', name: '@deepseek-ai/dsh-tool-cordis' },
       ] }]
       : [],
-    ...options.deepSeekSearch === undefined
+    ...options.tavilySearch === undefined
       ? []
       : [{
-        id: 'web-search-deepseek',
+        id: 'web-search-tavily',
         config: {
-          apiKeyEnv: options.deepSeekSearch.apiKeyEnv,
-          baseURL: options.deepSeekSearch.baseURL,
+          apiKeyEnv: options.tavilySearch.apiKeyEnv,
+          baseURL: options.tavilySearch.baseURL,
         },
       }],
     ...mode === 'record' || options.deepSeekMissingCredential === true
