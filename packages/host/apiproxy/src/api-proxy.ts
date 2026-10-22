@@ -2659,7 +2659,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }, signal)
         if (verified.error !== undefined) return err(request, verified.error)
         try {
-          const messageId = await ctx.subagents.followup(parent, childSessionId, content, {
+          // Promote inline base64 images into durable attachments before the
+          // content enters the child's log: the LLM context builder resolves
+          // image blocks through the attachment store, so raw data blocks
+          // would crash it downstream (same pipeline session.prompt uses).
+          // Only the text + inline-image shape participates; anything else
+          // passes through untouched.
+          const promotable = content.every(part => part.type === 'text'
+            || (part.type === 'image' && typeof (part as { data?: unknown }).data === 'string'))
+          const durable = promotable
+            ? await durablePromptContent(ctx, content as readonly PromptContentPart[])
+            : content
+          const messageId = await ctx.subagents.followup(parent, childSessionId, durable, {
             source: {
               kind: 'user',
               rpcId: request.rpcId,

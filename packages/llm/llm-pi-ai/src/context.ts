@@ -26,6 +26,138 @@ function flattenText(message: Message): string {
 }
 
 
+/** Decode JPEG intrinsic dimensions from raw bytes (0 when unparseable). */
+function jpegDimensions(bytes: Uint8Array): { width: number; height: number } {
+  const at = (index: number): number => bytes[index] ?? 0
+  try {
+    if (bytes.length < 4 || at(0) !== 0xff || at(1) !== 0xd8) return { width: 0, height: 0 }
+    let offset = 2
+    while (offset + 9 < bytes.length) {
+      if (at(offset) !== 0xff) { offset += 1; continue }
+      const marker = at(offset + 1)
+      const length = (at(offset + 2) << 8) | at(offset + 3)
+      // SOF0/SOF1/SOF2 carry frame dimensions at segment +5/+7.
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { height: (at(offset + 5) << 8) | at(offset + 6), width: (at(offset + 7) << 8) | at(offset + 8) }
+      }
+      offset += 2 + length
+    }
+  } catch { /* fall through */ }
+  return { width: 0, height: 0 }
+}
+
+/**
+ * Rewrite legacy inline image blocks ({type:'image', data} without an
+ * attachment reference — e.g. blocks admitted through paths that skipped
+ * attachment promotion) into synthetic attachment references, registering
+ * their decoded bytes in `versions` so the serializer can serve them like
+ * store-resolved request images. Without this the pipeline below dereferences
+ * `block.attachment.*` and crashes on any such historical block.
+ */
+function inlineLegacyImages(
+  blocks: readonly ContentBlock[],
+  versions: Map<AttachmentId, RequestImageAttachment>,
+  counter: { next: number },
+): readonly ContentBlock[] {
+  let changed = false
+  const out = blocks.map((block) => {
+    if (block.type === 'tool-result') {
+      const nested = inlineLegacyImages(block.content, versions, counter)
+      if (nested === block.content) return block
+      changed = true
+      return { ...block, content: nested } as ContentBlock
+    }
+    if (block.type !== 'image') return block
+    const attachment = (block as { attachment?: ImageAttachmentRef }).attachment
+    if (attachment !== undefined) return block
+    const data = (block as { data?: unknown }).data
+    if (typeof data !== 'string') return block
+    changed = true
+    const bytes = Buffer.from(data, 'base64')
+    const dims = jpegDimensions(bytes)
+    const id = `legacy-inline-${counter.next++}` as AttachmentId
+    const mediaType = (block as { mediaType?: string }).mediaType ?? 'image/jpeg'
+    const ref = {
+      attachmentId: id,
+      mediaType,
+      bytes: bytes.byteLength,
+      width: dims.width,
+      height: dims.height,
+    } as ImageAttachmentRef
+    versions.set(id, {
+      variantId: `${id}-raw` as RequestImageAttachment['variantId'],
+      attachment: ref,
+      data: bytes,
+      mediaType: mediaType as RequestImageAttachment['mediaType'],
+      bytes: bytes.byteLength,
+      width: dims.width,
+      height: dims.height,
+      depth: 'uchar',
+      space: 'srgb',
+      hasAlpha: false,
+    })
+    return { type: 'image', attachment: ref } as ContentBlock
+  })
+  return changed ? out : blocks
+}
+
+/**
+ * Mask legacy-inline image blocks (already served by `versions`, not present
+ * in the attachment store) as text placeholders so {@link prepareRequestImages}
+ * never tries to load them from storage.
+ */
+function maskLegacyImages(
+  blocks: readonly ContentBlock[],
+  versions: ReadonlyMap<AttachmentId, RequestImageAttachment>,
+): readonly ContentBlock[] {
+  let changed = false
+  const out = blocks.map((block) => {
+    if (block.type === 'tool-result') {
+      const nested = maskLegacyImages(block.content, versions)
+      if (nested === block.content) return block
+      changed = true
+      return { ...block, content: nested } as ContentBlock
+    }
+    if (block.type !== 'image') return block
+    const id = (block as { attachment?: ImageAttachmentRef }).attachment?.attachmentId
+    if (id === undefined || !versions.has(id)) return block
+    changed = true
+    return { type: 'text', text: '' } as ContentBlock
+  })
+  return changed ? out : blocks
+}
+
+/** Message-level wrapper for {@link maskLegacyImages}. */
+function maskLegacyImagesInMessages(
+  messages: readonly Message[],
+  versions: ReadonlyMap<AttachmentId, RequestImageAttachment>,
+): readonly Message[] {
+  let changed = false
+  const out = messages.map((message): Message => {
+    const content = maskLegacyImages(message.content, versions)
+    if (content === message.content) return message
+    changed = true
+    return { ...message, content: [...content] }
+  })
+  return changed ? out : messages
+}
+
+/** Message-level wrapper for {@link inlineLegacyImages}. */
+function inlineLegacyImagesInMessages(
+  messages: readonly Message[],
+  versions: Map<AttachmentId, RequestImageAttachment>,
+): readonly Message[] {
+  const counter = { next: 1 }
+  let changed = false
+  const out = messages.map((message): Message => {
+    const content = inlineLegacyImages(message.content, versions, counter)
+    if (content === message.content) return message
+    changed = true
+    return { ...message, content: [...content] }
+  })
+  return changed ? out : messages
+}
+
 /** Flatten text recursively inside one tool result. */
 function toolResultText(blocks: readonly ContentBlock[]): string {
   return blocks.map(block => block.type === 'text'
@@ -226,13 +358,21 @@ async function toPiContextWithImages(
   },
 ): Promise<PiContext> {
   assertSupportedImageRoles(options.messages)
-  const requestMessages = offloadRequestImagesWithPolicy(options.messages, {
+  const legacyVersions = new Map<AttachmentId, RequestImageAttachment>()
+  const inputMessages = inlineLegacyImagesInMessages(options.messages, legacyVersions)
+  const requestMessages = offloadRequestImagesWithPolicy(inputMessages, {
     representation: 'base64',
     ...maxRequestImageBytes === undefined ? {} : { maxBytes: maxRequestImageBytes },
     byteQuantum: 1,
     byteLength: ref => Math.min(ref.bytes, requestImagePolicy.maxBytes),
   })
-  const requestImages = await prepareRequestImages(requestMessages, attachments, requestImagePolicy, options.signal)
+  const requestImages = await prepareRequestImages(
+    maskLegacyImagesInMessages(requestMessages, legacyVersions),
+    attachments,
+    requestImagePolicy,
+    options.signal,
+  )
+  for (const [id, version] of legacyVersions) requestImages.set(id, version)
   const exactMessages = offloadRequestImagesWithPolicy(requestMessages, {
     representation: 'base64',
     ...maxRequestImageBytes === undefined ? {} : { maxBytes: maxRequestImageBytes },
